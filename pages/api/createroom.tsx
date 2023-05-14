@@ -4,7 +4,11 @@ import { randomBytes } from 'crypto';
 async function getRoomId() {
     const client = createClient();
 
-    client.on('error', err => console.log('Redis Client Error', err));
+    client.on('error', err => { 
+        console.log('Redis Client Error', err)
+        throw new Error("redis");
+    });
+
     await client.connect();
 
     let id: string = randomBytes(4).toString('hex');
