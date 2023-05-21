@@ -1,13 +1,6 @@
 import assert from 'node:assert';
 
-function shuffleDeck(deck: string[]) {
-    for (let i = deck.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [deck[i], deck[j]] = [deck[j], deck[i]];
-    }
-}
-
-class SuecaServer {
+export class SuecaServer {
     deck: string[] = ['2c', '2d', '2h', '2s', '3c', '3d', '3h', '3s', '4c', '4d', '4h', '4s',
                       '5c', '5d', '5h', '5s', '6c', '6d', '6h', '6s', '7c', '7d', '7h', '7s',
                       'Ac', 'Ad', 'Ah', 'As', 'Jc', 'Jd', 'Jh', 'Js', 'Kc', 'Kd', 'Kh', 'Ks',
@@ -77,6 +70,10 @@ class SuecaServer {
     }
 
     play(player: number, card: string): boolean {
+        if (this.round.length === 4) {
+            this.round = [];
+        }
+
         assert(player === this.turn);
         assert(this.cards[player].includes(card));
         assert(this.round.length == 0 || card[1] == this.round[0][1][1]);
@@ -90,12 +87,12 @@ class SuecaServer {
             let [winner, points] = this.getRoundWinner(); 
             this.points[winner % 2] += points;
             this.turn = winner;
-            
-            this.round = [];
         }
 
-        return this.sum(this.points) == 120;                    // game over
+        else {
+            this.turn = (this.turn + 1) % 4;
+        }
+
+        return this.sum(this.points) === 120;                    // game over
     }
-
-
 }
