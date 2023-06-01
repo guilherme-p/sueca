@@ -1,23 +1,25 @@
 import { createClient } from 'redis';
 import { randomBytes } from 'crypto';
 
+const client = createClient();
+
+client.on('error', err => { 
+    console.log('Redis Client Error', err)
+    throw new Error("redis");
+});
+
+let _ = await client.connect();
+
 async function getRoomId() {
-    const client = createClient();
-
-    client.on('error', err => { 
-        console.log('Redis Client Error', err)
-        throw new Error("redis");
-    });
-
-    await client.connect();
-
     let id: string = randomBytes(4).toString('hex');
-    let exists: string | null = await client.set(id, "1", {NX: true, EX: 60 * 60 * 24});
+    let exists: number = await client.sAdd("rooms", id);
     
-    while (exists === null) {
+    while (exists === 0) {
         id = randomBytes(4).toString('hex');
-        exists = await client.set(id, "1", {NX: true, EX: 60 * 60 * 24});
+        exists = await client.sAdd("rooms", id);
     }
+
+    await client.hSet(id, "created_ts", Date.now());
     
     return id;
 }

@@ -16,7 +16,7 @@ export class SuecaServer {
 
     constructor() {
         this.cards = this.deal();
-        this.trump = this.deck[0];
+        this.trump = this.cards[0][0];
     }
 
     sum(arr: number[]): number {
@@ -33,10 +33,10 @@ export class SuecaServer {
     deal(): [string[], string[], string[], string[]] {
         this.shuffleDeck();
 
-        return [this.deck.slice(0, 10),
-                this.deck.slice(10, 20),
-                this.deck.slice(20, 30),
-                this.deck.slice(30, 40)];
+        return [this.deck.slice(0, 10).sort(),
+                this.deck.slice(10, 20).sort(),
+                this.deck.slice(20, 30).sort(),
+                this.deck.slice(30, 40).sort()];
     }
 
     getRoundWinner(): [number, number] {
@@ -70,6 +70,9 @@ export class SuecaServer {
     }
 
     play(player: number, card: string): boolean {
+        let game_over: boolean = this.sum(this.points) === 120;   // game over
+        assert(!game_over);
+
         if (this.round.length === 4) {
             this.round = [];
         }
@@ -93,6 +96,7 @@ export class SuecaServer {
             this.turn = (this.turn + 1) % 4;
         }
 
-        return this.sum(this.points) === 120;                    // game over
+        game_over = this.sum(this.points) === 120;   // game over
+        return game_over;
     }
 }

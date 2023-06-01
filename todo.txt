@@ -1,0 +1,3 @@
+implementar reconnect, restore state including username!
+handle client disconnect, clear redis
+handle game over clean up 
