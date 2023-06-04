@@ -1,0 +1,48 @@
+import Image from 'next/image';
+import { ReactElement } from 'react';
+
+let cardImages: Record<string, ReactElement> = 
+{
+    '2c': <Image src={'../images/2_of_clubs.svg'} alt={'2 of clubs'} />,
+    '2d': <Image src={'../images/2_of_diamonds.svg'} alt={'2 of diamonds'} />,
+    '2h': <Image src={'../images/2_of_hearts.svg'} alt={'2 of hearts'} />,
+    '2s': <Image src={'../images/2_of_spades.svg'} alt={'2 of spades'} />,
+    '3c': <Image src={'../images/3_of_clubs.svg'} alt={'3 of clubs'} />,
+    '3d': <Image src={'../images/3_of_diamonds.svg'} alt={'3 of diamonds'} />,
+    '3h': <Image src={'../images/3_of_hearts.svg'} alt={'3 of hearts'} />,
+    '3s': <Image src={'../images/3_of_spades.svg'} alt={'3 of spades'} />,
+    '4c': <Image src={'../images/4_of_clubs.svg'} alt={'4 of clubs'} />,
+    '4d': <Image src={'../images/4_of_diamonds.svg'} alt={'4 of diamonds'} />,
+    '4h': <Image src={'../images/4_of_hearts.svg'} alt={'4 of hearts'} />,
+    '4s': <Image src={'../images/4_of_spades.svg'} alt={'4 of spades'} />,
+    '5c': <Image src={'../images/5_of_clubs.svg'} alt={'5 of clubs'} />,
+    '5d': <Image src={'../images/5_of_diamonds.svg'} alt={'5 of diamonds'} />,
+    '5h': <Image src={'../images/5_of_hearts.svg'} alt={'5 of hearts'} />,
+    '5s': <Image src={'../images/5_of_spades.svg'} alt={'5 of spades'} />,
+    '6c': <Image src={'../images/6_of_clubs.svg'} alt={'6 of clubs'} />,
+    '6d': <Image src={'../images/6_of_diamonds.svg'} alt={'6 of diamonds'} />,
+    '6h': <Image src={'../images/6_of_hearts.svg'} alt={'6 of hearts'} />,
+    '6s': <Image src={'../images/6_of_spades.svg'} alt={'6 of spades'} />,
+    '7c': <Image src={'../images/7_of_clubs.svg'} alt={'7 of clubs'} />,
+    '7d': <Image src={'../images/7_of_diamonds.svg'} alt={'7 of diamonds'} />,
+    '7h': <Image src={'../images/7_of_hearts.svg'} alt={'7 of hearts'} />,
+    '7s': <Image src={'../images/7_of_spades.svg'} alt={'7 of spades'} />,
+    'Ac': <Image src={'../images/ace_of_clubs.svg'} alt={'ace of clubs'} />,
+    'Ad': <Image src={'../images/ace_of_diamonds.svg'} alt={'ace of diamonds'} />,
+    'Ah': <Image src={'../images/ace_of_hearts.svg'} alt={'ace of hearts'} />,
+    'As': <Image src={'../images/ace_of_spades.svg'} alt={'ace of spades'} />,
+    'Jc': <Image src={'../images/jack_of_clubs.svg'} alt={'jack of clubs'} />,
+    'Jd': <Image src={'../images/jack_of_diamonds.svg'} alt={'jack of diamonds'} />,
+    'Jh': <Image src={'../images/jack_of_hearts.svg'} alt={'jack of hearts'} />,
+    'Js': <Image src={'../images/jack_of_spades.svg'} alt={'jack of spades'} />,
+    'Kc': <Image src={'../images/king_of_clubs.svg'} alt={'king of clubs'} />,
+    'Kd': <Image src={'../images/king_of_diamonds.svg'} alt={'king of diamonds'} />,
+    'Kh': <Image src={'../images/king_of_hearts.svg'} alt={'king of hearts'} />,
+    'Ks': <Image src={'../images/king_of_spades.svg'} alt={'king of spades'} />,
+    'Qc': <Image src={'../images/queen_of_clubs.svg'} alt={'queen of clubs'} />,
+    'Qd': <Image src={'../images/queen_of_diamonds.svg'} alt={'queen of diamonds'} />,
+    'Qh': <Image src={'../images/queen_of_hearts.svg'} alt={'queen of hearts'} />,
+    'Qs': <Image src={'../images/queen_of_spades.svg'} alt={'queen of spades'} />,
+};
+
+export default cardImages;

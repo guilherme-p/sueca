@@ -273,7 +273,7 @@ export default async function SocketHandler(req: NextApiRequest, res: NextApiRes
                     let player4_username: string = team2[1];
 
                     let m: SocketMessage = {
-                        type: SocketMessageType.StartGame,
+                        type: SocketMessageType.Teams,
                         body: {
                             team1: [player1_username, player3_username],
                             team2: [player2_username, player4_username],
@@ -403,8 +403,7 @@ async function cleanupRooms() {
         }
 
         let time_elapsed = Date.now() - (created_ts as unknown as number); 
-        time_elapsed = Math.floor(time_elapsed) / 1000;         // in seconds
-
+        time_elapsed = Math.floor(time_elapsed) / 1000; // in seconds
         if (time_elapsed >= ROOM_EXPIRATION_TIME) {
             cleanupRoom(room);
         }

@@ -1,21 +1,97 @@
 import assert from 'node:assert';
 import { getCookie, setCookie, deleteCookie, hasCookie } from 'cookies-next';
 import { useRouter } from 'next/router'
-import { useState, useEffect, Dispatch, SetStateAction } from 'react';
+import { useState, useEffect, useMemo, Dispatch, SetStateAction, ReactNode, ReactElement } from 'react';
 import { io, Socket } from "socket.io-client";
 import { SocketMessage, SocketMessageType } from '../../lib/socket_types';
-import { cardImages } from 'images';
-import { tableImage } from '../../images/table.svg';
+import cardImages from '../../lib/cardImages';
+import tableImage from '../../images/table.svg';
+import Image from 'next/image';
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-function PlayScreen({room, socket, team1, team2, username, cards, trump, round, turn, points}:
-    {room: string, socket: Socket, team1: string[], team2: string[], username: string, cards: string[], trump: string, round: string[], turn: number, points: number[]}) {
-    // nothing
+function UserCards({round, cards, setCards}: {round: [number, string][], cards: string[], setCards: Dispatch<SetStateAction<string[]>>}): ReactElement {
+
+}
+
+function UserMove({round, usernameNumber}: {round: [number, string][], usernameNumber: number}): ReactElement {
+    if (! (round && round.map(([n, c]) => n).includes(usernameNumber)) ) {
+        return <></>;
+    }
+
+    let roundUsernameNumbers: number[] = round.map(([n, c]) => n);
+    let roundUsernameCard: string[] = round.map(([n, c]) => c);
+
+    let i: number = roundUsernameNumbers.indexOf(usernameNumber);
+    let card: string  = roundUsernameCard[i];
+
+    return cardImages[card];
+}
+
+function PlayScreen({room, socket, team1, team2, username, playerNumber, cards, setCards, trump, round, turn, points}:
+    {
+        room: string, socket: Socket, team1: string[], team2: string[], username: string, playerNumber: number, cards: string[],
+        setCards: Dispatch<SetStateAction<string[]>>, trump: string, round: [number, string][], turn: number, points: number[]}
+    ) 
+
+{
+    let all: [string, number][] = [team1[0], team2[0], team1[1], team2[1]].map((element, index) => [element, index]);
+    let order: [string, number][] = all.slice(playerNumber - 1).concat(all.slice(0, playerNumber - 1)); // bottom left top right
+
+    let usernames: string[] = order.map(([u, n]) => u);
+    let usernameNumbers: number[] = order.map(([u, n]) => n);
+
+    return (
+        <div className="container table relative mx-auto my-auto">
+            <Image
+                src={tableImage}
+                alt="Card table"
+            />
+
+            <span className="absolute">
+                {usernames[0]}
+            </span>
+
+            <div>
+                <UserMove round={round} usernameNumber={usernameNumbers[0]} />
+            </div>
+
+            <div>
+                <UserCards round={round} cards={cards} setCards={setCards} />
+            </div>
+
+            <span className="absolute">
+                {usernames[1]}
+            </span>
+
+            <div>
+                <UserMove round={round} usernameNumber={usernameNumbers[1]} />
+            </div>
+
+            <span className="absolute">
+                {usernames[2]}
+            </span>
+
+            <div>
+                <UserMove round={round} usernameNumber={usernameNumbers[2]} />
+            </div>
+
+            <span className="absolute">
+                {usernames[3]}
+            </span>
+
+            <div>
+                <UserMove round={round} usernameNumber={usernameNumbers[3]} />
+            </div>
+
+        </div>
+    );
 }
 
 function JoinTeamScreen({room, socket, team1, team2, username, setUsername}:
-                        {room: string, socket: Socket, team1: string[], team2: string[], username: string, setUsername: Dispatch<SetStateAction<string>>}) {
+    {room: string, socket: Socket, team1: string[], team2: string[], username: string, setUsername: Dispatch<SetStateAction<string>>}) 
 
+{
     function joinTeam(team: number) {
         if (!username) {
             alert("Precisas de um username para jogar!");
@@ -43,8 +119,6 @@ function JoinTeamScreen({room, socket, team1, team2, username, setUsername}:
 
 
     function leaveTeam(team: number) {
-        assert( (team === 1 && team1.includes(username)) || (team === 2 && team2.includes(username)) );
-
         let user_id = getCookie(`sueca:${room}:user_id`);
 
         let m: SocketMessage = {
@@ -58,6 +132,14 @@ function JoinTeamScreen({room, socket, team1, team2, username, setUsername}:
 
         socket.emit("message", room, m);
         deleteCookie(`sueca:${room}:user_id`);
+    }
+
+    function startGame() {
+        let m: SocketMessage = {
+            type: SocketMessageType.StartGame,
+        };
+
+        socket.emit("message", room, m);
     }
 
     function onUsernameChange(event: React.ChangeEvent<HTMLInputElement>) {
@@ -140,7 +222,7 @@ function JoinTeamScreen({room, socket, team1, team2, username, setUsername}:
             </div>
 
             {(team1.includes(username) || team2.includes(username)) && team1.length === 2 && team2.length === 2 &&
-                <button 
+                <button onClick={startGame} 
                     className="text-center w-30 h-10 mt-2 mb-4 px-6 py-2 bg-blue-700 text-white hover:bg-blue-800
                     font-semibold rounded-lg border-solid">
                     Começar jogo
@@ -168,6 +250,7 @@ export default function Page() {
 
     let [round, setRound] = useState([] as string[]);
     let [turn, setTurn] = useState(1);
+    let [playerNumber, setPlayerNumber] = useState(0);
     let [points, setPoints] = useState([0, 0]);
 
     let [socket, setSocket] = useState<Socket | undefined>(undefined);
@@ -206,21 +289,14 @@ export default function Page() {
                     break;
                 }
 
-                case SocketMessageType.StartGame: {
-                    let team1 = message.body.team1;
-                    let team2 = message.body.team2;
-
-                    setTeam1(team1);
-                    setTeam2(team2);
-                    setInGame(true);
-
-                    break;
-                }
-
                 case SocketMessageType.Deal: {
                     let cards = message.body.cards;
                     let trump = message.body.trump;
 
+                    let all = [team1[0], team2[0], team1[1], team2[1]];
+                    setPlayerNumber(all.indexOf(username) + 1);
+
+                    setInGame(true);
                     setCards(cards);
                     setTrump(trump);
 
@@ -236,11 +312,11 @@ export default function Page() {
                     setRound(newRound);
                     
                     if (round.length === 4 && !game_over) {
-                        setTimeout(() => {
-                            setRound([]);
-                            setTurn(newTurn);
-                            setPoints(newPoints);
-                        }, 3000); 
+                        setTurn(newTurn);
+                        await sleep(3000);
+
+                        setRound([]);
+                        setPoints(newPoints);
                     } 
 
                     else {
