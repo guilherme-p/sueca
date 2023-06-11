@@ -10,8 +10,18 @@ import Image from 'next/image';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-function UserCards({round, cards, setCards}: {round: [number, string][], cards: string[], setCards: Dispatch<SetStateAction<string[]>>}): ReactElement {
+function UserCards({round, cards, setCards, setActiveCard, validateMove}: 
+    {
+        round: [number, string][], cards: string[], setCards: Dispatch<SetStateAction<string[]>>, setActiveCard: Dispatch<SetStateAction<string>>, 
+        validateMove: (card: string) => boolean
+    }): ReactElement 
+{
 
+    return (
+        <div className="flex flex-row gap-1 container relative">
+            {cards.map(c => <button disabled={!validateMove(c)} onClick={() => setActiveCard(c)} className="disabled:opacity-50">{cardImages[c]}</button>)}
+        </div>
+    );
 }
 
 function UserMove({round, usernameNumber}: {round: [number, string][], usernameNumber: number}): ReactElement {
@@ -31,58 +41,78 @@ function UserMove({round, usernameNumber}: {round: [number, string][], usernameN
 function PlayScreen({room, socket, team1, team2, username, playerNumber, cards, setCards, trump, round, turn, points}:
     {
         room: string, socket: Socket, team1: string[], team2: string[], username: string, playerNumber: number, cards: string[],
-        setCards: Dispatch<SetStateAction<string[]>>, trump: string, round: [number, string][], turn: number, points: number[]}
-    ) 
+        setCards: Dispatch<SetStateAction<string[]>>, trump: string, round: [number, string][], turn: number, points: number[]
+    }) 
 
 {
+    let [activeCard, setActiveCard] = useState("");
+
+    function validateMove(card: string): boolean {
+
+        return true;
+    }
+
     let all: [string, number][] = [team1[0], team2[0], team1[1], team2[1]].map((element, index) => [element, index]);
-    let order: [string, number][] = all.slice(playerNumber - 1).concat(all.slice(0, playerNumber - 1)); // bottom left top right
+    let order: [string, number][] = playerNumber > 0 ? all.slice(playerNumber - 1).concat(all.slice(0, playerNumber - 1)) : all; // bottom left top right
 
     let usernames: string[] = order.map(([u, n]) => u);
     let usernameNumbers: number[] = order.map(([u, n]) => n);
 
     return (
-        <div className="container table relative mx-auto my-auto">
-            <Image
-                src={tableImage}
-                alt="Card table"
-            />
+        <div className="container h-screen w-screen flex flex-col items-center justify-center relative">
+            <div className="inline-block relative">
+                <Image
+                    src={tableImage}
+                    alt="Card table"
+                />
 
-            <span className="absolute">
-                {usernames[0]}
-            </span>
+                <span className="absolute top-[90%] left-1/2 -translate-x-1/2 text-center">
+                    {usernames[0]}
+                </span>
 
-            <div>
-                <UserMove round={round} usernameNumber={usernameNumbers[0]} />
+                <div className="absolute top-[85%] left-1/2 -translate-x-1/2 ">
+                    <UserMove round={round} usernameNumber={usernameNumbers[0]} />
+                </div>
+
+                <span className="absolute top-1/2 -translate-y-1/2 left-[10%] -translate-x-[10%]">
+                    {usernames[1]}
+                </span>
+
+                <div>
+                    <UserMove round={round} usernameNumber={usernameNumbers[1]} />
+                </div>
+
+                <span className="absolute top-[10%] left-1/2 -translate-x-1/2 ">
+                    {usernames[2]}
+                </span>
+
+                <div>
+                    <UserMove round={round} usernameNumber={usernameNumbers[2]} />
+                </div>
+
+                <span className="absolute top-1/2 -translate-y-1/2 left-[90%] -translate-x-[90%]">
+                    {usernames[3]}
+                </span>
+
+                <div>
+                    <UserMove round={round} usernameNumber={usernameNumbers[3]} />
+                </div>
             </div>
 
-            <div>
-                <UserCards round={round} cards={cards} setCards={setCards} />
-            </div>
+            {cards &&  
+                <div className="my-2 flex flex-col gap-4 justify-center items-center">
+                    <UserCards round={round} cards={cards} setCards={setCards} setActiveCard={setActiveCard} validateMove={validateMove} />
 
-            <span className="absolute">
-                {usernames[1]}
-            </span>
+                    {activeCard &&
+                        <button onClick={ () => 1 } 
+                            className="text-center text-2xl w-64 h-20 mt-2 mb-4 px-6 py-2 bg-blue-700 text-white hover:bg-blue-800
+                            font-semibold rounded-lg border-solid">
+                            Jogar
+                        </button>
 
-            <div>
-                <UserMove round={round} usernameNumber={usernameNumbers[1]} />
-            </div>
-
-            <span className="absolute">
-                {usernames[2]}
-            </span>
-
-            <div>
-                <UserMove round={round} usernameNumber={usernameNumbers[2]} />
-            </div>
-
-            <span className="absolute">
-                {usernames[3]}
-            </span>
-
-            <div>
-                <UserMove round={round} usernameNumber={usernameNumbers[3]} />
-            </div>
+                    }
+                </div>
+            }
 
         </div>
     );
@@ -248,7 +278,7 @@ export default function Page() {
     let [cards, setCards] = useState([] as string[]);
     let [trump, setTrump] = useState("");
 
-    let [round, setRound] = useState([] as string[]);
+    let [round, setRound] = useState([] as [number, string][]);
     let [turn, setTurn] = useState(1);
     let [playerNumber, setPlayerNumber] = useState(0);
     let [points, setPoints] = useState([0, 0]);
@@ -271,7 +301,7 @@ export default function Page() {
         await fetch("/api/socket");
         let socket = io();
 
-        socket.on("message", (message) => {
+        socket.on("message", async (message) => {
             console.log(message);
             switch (message.type) {
                 case SocketMessageType.UserId: {
@@ -290,38 +320,37 @@ export default function Page() {
                 }
 
                 case SocketMessageType.Deal: {
-                    let cards = message.body.cards;
-                    let trump = message.body.trump;
+                    let rCards = message.body.cards;
+                    let rTrump = message.body.trump;
 
                     let all = [team1[0], team2[0], team1[1], team2[1]];
                     setPlayerNumber(all.indexOf(username) + 1);
 
                     setInGame(true);
-                    setCards(cards);
-                    setTrump(trump);
+                    setCards(rCards);
+                    setTrump(rTrump);
 
                     break;
                 }
 
                 case SocketMessageType.Round: {
-                    let newRound = message.body.round;
-                    let newTurn = message.body.turn;
-                    let newPoints = message.body.points;
+                    let rRound = message.body.round;
+                    let rTurn = message.body.turn;
+                    let rPoints = message.body.points;
                     let game_over = message.body.game_over;
 
-                    setRound(newRound);
+                    setRound(rRound);
+                    setTurn(rTurn);
                     
                     if (round.length === 4 && !game_over) {
-                        setTurn(newTurn);
-                        await sleep(3000);
-
-                        setRound([]);
-                        setPoints(newPoints);
+                        setTimeout(() => {
+                            setRound([]);
+                            setPoints(rPoints);
+                        }, 3000);
                     } 
 
                     else {
-                        setTurn(newTurn);
-                        setPoints(newPoints);
+                        setPoints(rPoints);
                     }
 
                     if (game_over) {
@@ -330,6 +359,27 @@ export default function Page() {
                     }
 
                     break;
+                }
+
+                case SocketMessageType.JoinRoom: {
+                    setInGame(true);
+
+                    let rUsername = message.body.username;
+                    let rCards = message.body.cards;
+                    let rRound = message.body.round;
+                    let rTurn = message.body.turn;
+                    let rTrump = message.body.trump;
+                    let rPoints = message.body.points;
+
+                    if (rUsername && rCards) {
+                        setUsername(rUsername);
+                        setCards(rCards);
+                    }
+
+                    setRound(rRound);
+                    setTurn(rTurn);
+                    setTrump(rTrump);
+                    setPoints(rPoints);
                 }
             }
 
@@ -364,7 +414,21 @@ export default function Page() {
     }
 
     else {
-        // nothing
+        if (socket && room) {
+            return <PlayScreen 
+                room={room}
+                socket={socket}
+                team1={team1}
+                team2={team2}
+                username={username}
+                playerNumber={playerNumber}
+                cards={cards}
+                setCards={setCards}
+                trump={trump}
+                round={round}
+                turn={turn}
+                points={points}
+            />;
+        }
     }
-
 }

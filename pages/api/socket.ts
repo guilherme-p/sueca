@@ -136,22 +136,21 @@ export default async function SocketHandler(req: NextApiRequest, res: NextApiRes
                         }
                     }
 
-                    else {
-                        let m: SocketMessage = {
-                            type: SocketMessageType.Teams,
-                            body: {
-                                team1: team1,
-                                team2: team2,
-                            }
+                    let m: SocketMessage = {
+                        type: SocketMessageType.Teams,
+                        body: {
+                            team1: team1,
+                            team2: team2,
                         }
-
-                        io.to(room).emit("message", m);
                     }
+
+                    socket.emit("message", m);
 
                     break;
                 } 
 
                 case SocketMessageType.JoinTeam: {
+                    assert(await redis.sIsMember("rooms", room));
                     assert(!await redis.hExists(room, "game"));
 
                     let username = message.body.username;
@@ -225,6 +224,7 @@ export default async function SocketHandler(req: NextApiRequest, res: NextApiRes
                 }
 
                 case SocketMessageType.LeaveTeam: {
+                    assert(await redis.sIsMember("rooms", room));
                     assert(!await redis.hExists(room, "game"));
 
                     let username = message.body.username;
@@ -258,6 +258,7 @@ export default async function SocketHandler(req: NextApiRequest, res: NextApiRes
                 }
 
                 case SocketMessageType.StartGame: {
+                    assert(await redis.sIsMember("rooms", room));
                     assert(!await redis.hExists(room, "game"));
 
                     let n_team1: number = await redis.lLen(`${room}:team1`);
@@ -336,6 +337,7 @@ export default async function SocketHandler(req: NextApiRequest, res: NextApiRes
                 }
 
                 case SocketMessageType.Play: {
+                    assert(await redis.sIsMember("rooms", room));
                     assert(await redis.hExists(room, "game"));
                     let game = await redis.hGet(room, "game");
 
@@ -438,6 +440,7 @@ async function cleanupUsername(room: string, username: string) {
 
     await redis.hDel(`${room}:username_to_socket`, username);
     await redis.hDel(`${room}:socket_to_username`, socket_id as string);
+    await redis.hDel(`socket_to_room`, socket_id as string);
     await redis.hDel(`${room}:id_to_username`, user_id as string);
     await redis.hDel(`${room}:username_to_id`, username);
     await redis.lRem(`${room}:team${team_n}`, 0, username); 

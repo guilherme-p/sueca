@@ -1,8 +1,8 @@
-const { io } = require("socket.io-client");
+import { io } from "socket.io-client";
 import { SocketMessage, SocketMessageType } from '../lib/socket_types';
 
 const url = process.env.URL || "http://localhost:3000";
-const room: string = process.env.ROOM || "";
+const room: string = process.env.ROOM || "6985b650";
 const team1: number = Number(process.env.TEAM1) || 1;
 const team2: number = Number(process.env.TEAM2) || 2;
 
