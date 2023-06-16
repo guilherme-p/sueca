@@ -57,6 +57,7 @@ export default async function SocketHandler(req: NextApiRequest, res: NextApiRes
     io.on("connection", (socket) => {
         socket.on("message", async (room, message) => {
             console.log(room, message, socket.id);
+
             switch (message.type) {
                 case SocketMessageType.JoinRoom: {
                     let exists: boolean = await redis.sIsMember("rooms", room);
@@ -64,6 +65,15 @@ export default async function SocketHandler(req: NextApiRequest, res: NextApiRes
                     if (!exists) {
                         return;
                     }
+
+                    let m: SocketMessage = {
+                        type: SocketMessageType.RoomExists,
+                        body: {
+                            room: room,
+                        }
+                    }
+
+                    socket.emit("message", m);
 
                     socket.join(room);
 
@@ -76,8 +86,9 @@ export default async function SocketHandler(req: NextApiRequest, res: NextApiRes
 
 
                     if (inGame) {
-                        let game = await redis.hGet(room, "game");
-                        let game_obj: SuecaServer = JSON.parse(game as string);
+                        let game = await redis.hGet(room, "game") as string;
+                        let game_obj: SuecaServer = new SuecaServer();
+                        game_obj.from(JSON.parse(game));
 
                         if (user_id !== undefined) {
                             let username = await redis.hGet(`${room}:id_to_username`, user_id);
@@ -136,7 +147,7 @@ export default async function SocketHandler(req: NextApiRequest, res: NextApiRes
                         }
                     }
 
-                    let m: SocketMessage = {
+                    m = {
                         type: SocketMessageType.Teams,
                         body: {
                             team1: team1,
@@ -164,7 +175,7 @@ export default async function SocketHandler(req: NextApiRequest, res: NextApiRes
                     let n_players_team = team === 1 ? team1.length : team2.length;
                     assert(n_players_team < 4); 
 
-                    let existing_player: boolean = user_id !== undefined && username === await redis.hGet(`${room}:id_to_username`, user_id);; 
+                    let existing_player: boolean = user_id !== undefined && username === await redis.hGet(`${room}:id_to_username`, user_id); 
                     let new_player: boolean = !existing_player;
 
                     if (new_player) {
@@ -284,6 +295,8 @@ export default async function SocketHandler(req: NextApiRequest, res: NextApiRes
                     io.to(room).emit("message", m);
 
                     let game_obj = new SuecaServer();
+                    game_obj.start();
+
                     let cards: [string[], string[], string[], string[]] = game_obj.cards;
 
                     let player1_socket = await redis.hGet(`${room}:username_to_socket`, player1_username);
@@ -339,26 +352,30 @@ export default async function SocketHandler(req: NextApiRequest, res: NextApiRes
                 case SocketMessageType.Play: {
                     assert(await redis.sIsMember("rooms", room));
                     assert(await redis.hExists(room, "game"));
-                    let game = await redis.hGet(room, "game");
+                    let game = await redis.hGet(room, "game") as string;
 
                     let user_id: string = message.body.user_id;
+                    let card = message.body.card;
 
                     assert(await redis.hExists(`${room}:id_to_username`, user_id));
-                    let username = await redis.hGet(`${room}:id_to_username`, user_id);
+                    let username = await redis.hGet(`${room}:id_to_username`, user_id) as string;
 
                     let team1 = await redis.lRange(`${room}:team1`, 0, -1);
                     let team2 = await redis.lRange(`${room}:team2`, 0, -1);
                     let all = [team1[0], team2[0], team1[1], team2[1]];
 
-                    assert(all.includes(username as string));
+                    assert(all.includes(username));
 
-                    let player_n = all.indexOf(username as string);
-                    let card = message.body.card;
+                    let player_n = all.indexOf(username);
 
-                    let game_obj: SuecaServer = JSON.parse(game as string);
+                    let game_obj: SuecaServer = new SuecaServer();
+                    game_obj.from(JSON.parse(game));
+
                     let game_over: boolean = game_obj.play(player_n, card);
 
                     await redis.hSet(room, "game", JSON.stringify(game));
+
+                    let player_socket = await redis.hGet(`${room}:username_to_socket`, username) as string;
 
                     let m: SocketMessage = {
                         type: SocketMessageType.Round,
@@ -372,8 +389,17 @@ export default async function SocketHandler(req: NextApiRequest, res: NextApiRes
 
                     io.to(room).emit("message", m);
 
+                    m = {
+                        type: SocketMessageType.Play,
+                        body: {
+                            cards: game_obj.cards[player_n],
+                        }
+                    };
+
+                    io.to(player_socket).emit("message", m);
+
                     if (game_over) {
-                        await cleanupRoom(room);
+                        cleanupRoom(room);
                     }
                 }
             } 
@@ -457,7 +483,7 @@ async function cleanupSocket(socket_id: string) {
     let team2 = await redis.lRange(`${room}:team2`, 0, -1);
     let all = [team1[0], team2[0], team1[1], team2[1]];
 
-    let username = await redis.hGet(`${room}:username_to_socket`, socket_id);
+    let username = await redis.hGet(`${room}:socket_to_username`, socket_id);
 
     let player_n = all.indexOf(username as string);
     let team_n = (player_n % 2) + 1;

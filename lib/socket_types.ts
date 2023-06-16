@@ -1,6 +1,7 @@
 export enum SocketMessageType {
     UsernameTaken,
     UserId,
+    RoomExists,
     JoinRoom,
     JoinTeam,
     LeaveTeam,
@@ -13,5 +14,5 @@ export enum SocketMessageType {
 
 export interface SocketMessage {
     type: SocketMessageType;
-    body?: Object | undefined;
+    body?: Object;
 }

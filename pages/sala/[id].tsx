@@ -8,34 +8,55 @@ import cardImages from '../../lib/cardImages';
 import tableImage from '../../images/table.svg';
 import Image from 'next/image';
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-function UserCards({round, cards, setCards, setActiveCard, validateMove}: 
+function UserCards({round, cards, activeCard, setActiveCard, validateMove, handlePlay}: 
     {
-        round: [number, string][], cards: string[], setCards: Dispatch<SetStateAction<string[]>>, setActiveCard: Dispatch<SetStateAction<string>>, 
-        validateMove: (card: string) => boolean
+        round: [number, string][], cards: string[], activeCard: string, setActiveCard: Dispatch<SetStateAction<string>>, 
+        validateMove: (card: string) => boolean, handlePlay: (card: string) => void
     }): ReactElement 
 {
 
     return (
-        <div className="flex flex-row gap-1 container relative">
-            {cards.map(c => <button disabled={!validateMove(c)} onClick={() => setActiveCard(c)} className="disabled:opacity-50">{cardImages[c]}</button>)}
+        <div className="my-2 flex flex-col gap-4 justify-center items-center">
+            <div className="flex flex-row gap-1 container relative">
+                {
+                    cards.map(c => 
+                        <button key={c} disabled={!validateMove(c)} onClick={() => setActiveCard(c)} 
+                            className={`${activeCard === c ? "border-2 border-solid border-red-500 rounded-lg " : ""}` + "disabled:opacity-50"}>
+                            {cardImages[c]}
+                        </button>
+                    )
+                }
+            </div>
+
+            {activeCard &&
+                <button onClick={ () => handlePlay(activeCard) } 
+                    className="text-center text-2xl w-40 h-15 mt-2 mb-4 px-6 py-2 bg-blue-700 text-white hover:bg-blue-800
+                    font-semibold rounded-lg border-solid">
+                    Jogar
+                </button>
+
+            }
+
         </div>
     );
 }
 
-function UserMove({round, usernameNumber}: {round: [number, string][], usernameNumber: number}): ReactElement {
-    if (! (round && round.map(([n, c]) => n).includes(usernameNumber)) ) {
+function UserMove({round, playerNumber}: {round: [number, string][], playerNumber: number}) {
+    if (! (round && round.map(([n, c]) => n).includes(playerNumber)) ) {
         return <></>;
     }
 
-    let roundUsernameNumbers: number[] = round.map(([n, c]) => n);
-    let roundUsernameCard: string[] = round.map(([n, c]) => c);
+    let roundPlayerNumbers: number[] = round.map(([n, c]) => n);
+    let roundPlayerCards: string[] = round.map(([n, c]) => c);
 
-    let i: number = roundUsernameNumbers.indexOf(usernameNumber);
-    let card: string  = roundUsernameCard[i];
+    let i: number = roundPlayerNumbers.indexOf(playerNumber);
+    let card: string  = roundPlayerCards[i];
 
-    return cardImages[card];
+    return (
+        <div className="w-20 container relative">
+            {cardImages[card]}
+        </div>
+    );
 }
 
 function PlayScreen({room, socket, team1, team2, username, playerNumber, cards, setCards, trump, round, turn, points}:
@@ -48,8 +69,22 @@ function PlayScreen({room, socket, team1, team2, username, playerNumber, cards, 
     let [activeCard, setActiveCard] = useState("");
 
     function validateMove(card: string): boolean {
+        return playerNumber === turn &&
+        cards.includes(card) &&
+        (round.length === 0 || card[1] === round[0][1][1] || !cards.map(c => c[1]).includes(round[0][1][1]));
+    }
 
-        return true;
+    function handlePlay(card: string) {
+        let m: SocketMessage = {
+            type: SocketMessageType.Play,
+            body: {
+                user_id: getCookie(`sueca:${room}:user_id`),
+                card: card,
+            }
+        }
+
+        socket.emit("message", room, m);
+        setActiveCard("");
     }
 
     let all: [string, number][] = [team1[0], team2[0], team1[1], team2[1]].map((element, index) => [element, index]);
@@ -70,49 +105,36 @@ function PlayScreen({room, socket, team1, team2, username, playerNumber, cards, 
                     {usernames[0]}
                 </span>
 
-                <div className="absolute top-[85%] left-1/2 -translate-x-1/2 ">
-                    <UserMove round={round} usernameNumber={usernameNumbers[0]} />
+                <div className="absolute top-[70%] left-1/2 -translate-x-1/2 -translate-y-1/2">
+                    <UserMove round={round} playerNumber={usernameNumbers[0]} />
                 </div>
 
                 <span className="absolute top-1/2 -translate-y-1/2 left-[10%] -translate-x-[10%]">
                     {usernames[1]}
                 </span>
 
-                <div>
-                    <UserMove round={round} usernameNumber={usernameNumbers[1]} />
+                <div className="absolute top-1/2 left-[20%] -translate-x-1/2 -translate-y-1/2">
+                    <UserMove round={round} playerNumber={usernameNumbers[1]} />
                 </div>
 
                 <span className="absolute top-[10%] left-1/2 -translate-x-1/2 ">
                     {usernames[2]}
                 </span>
 
-                <div>
-                    <UserMove round={round} usernameNumber={usernameNumbers[2]} />
+                <div className="absolute top-[30%] left-1/2 -translate-x-1/2 -translate-y-1/2">
+                    <UserMove round={round} playerNumber={usernameNumbers[2]} />
                 </div>
 
                 <span className="absolute top-1/2 -translate-y-1/2 left-[90%] -translate-x-[90%]">
                     {usernames[3]}
                 </span>
 
-                <div>
-                    <UserMove round={round} usernameNumber={usernameNumbers[3]} />
+                <div className="absolute top-1/2 left-[80%] -translate-x-1/2 -translate-y-1/2">
+                    <UserMove round={round} playerNumber={usernameNumbers[3]} />
                 </div>
             </div>
 
-            {cards &&  
-                <div className="my-2 flex flex-col gap-4 justify-center items-center">
-                    <UserCards round={round} cards={cards} setCards={setCards} setActiveCard={setActiveCard} validateMove={validateMove} />
-
-                    {activeCard &&
-                        <button onClick={ () => 1 } 
-                            className="text-center text-2xl w-64 h-20 mt-2 mb-4 px-6 py-2 bg-blue-700 text-white hover:bg-blue-800
-                            font-semibold rounded-lg border-solid">
-                            Jogar
-                        </button>
-
-                    }
-                </div>
-            }
+            {cards && <UserCards round={round} cards={cards} activeCard={activeCard} setActiveCard={setActiveCard} validateMove={validateMove} handlePlay={handlePlay}/>}
 
         </div>
     );
@@ -268,6 +290,8 @@ export default function Page() {
     const { id } = router.query;
     const room = id ? (Array.isArray(id) ? id[0] : id) : ""; // query string can be longer than one param, even though it shouldnt
 
+    let [roomExists, setRoomExists] = useState(false);
+
     let [inGame, setInGame] = useState(false);
 
     let [username, setUsername] = useState("");
@@ -279,7 +303,7 @@ export default function Page() {
     let [trump, setTrump] = useState("");
 
     let [round, setRound] = useState([] as [number, string][]);
-    let [turn, setTurn] = useState(1);
+    let [turn, setTurn] = useState(0);
     let [playerNumber, setPlayerNumber] = useState(0);
     let [points, setPoints] = useState([0, 0]);
 
@@ -303,10 +327,23 @@ export default function Page() {
 
         socket.on("message", async (message) => {
             console.log(message);
+
             switch (message.type) {
+                case SocketMessageType.RoomExists: {
+                    let rRoom = message.body.room;
+
+                    if (room === rRoom) {
+                        setRoomExists(true);
+                    } 
+
+                    break;
+                }
+
                 case SocketMessageType.UserId: {
                     let user_id = message.body.user_id;
                     setCookie(`sueca:${room}:user_id`, user_id, {maxAge: 60 * 60 * 24});
+
+                    break;
                 }
 
                 case SocketMessageType.Teams: {
@@ -333,6 +370,13 @@ export default function Page() {
                     break;
                 }
 
+                case SocketMessageType.Play: {
+                    let rCards = message.body.cards;
+                    setCards(rCards);
+
+                    break;
+                }
+
                 case SocketMessageType.Round: {
                     let rRound = message.body.round;
                     let rTurn = message.body.turn;
@@ -344,8 +388,8 @@ export default function Page() {
                     
                     if (round.length === 4 && !game_over) {
                         setTimeout(() => {
-                            setRound([]);
-                            setPoints(rPoints);
+                            setRound(currentRound => currentRound.length !== 4 ? currentRound : []);
+                            setPoints(currentPoints => currentPoints > rPoints ? currentPoints : rPoints);
                         }, 3000);
                     } 
 
@@ -400,21 +444,20 @@ export default function Page() {
         setSocket(socket);
     }
 
-    if (!inGame) {
-        if (socket && room) {
-            return <JoinTeamScreen 
-                        room={room}
-                        socket={socket}
-                        team1={team1}
-                        team2={team2}
-                        username={username}
-                        setUsername={setUsername}
-                    />;
-        }
-    }
 
-    else {
-        if (socket && room) {
+    if (socket && room && roomExists) {
+        if (!inGame) {
+            return <JoinTeamScreen 
+                room={room}
+                socket={socket}
+                team1={team1}
+                team2={team2}
+                username={username}
+                setUsername={setUsername}
+            />;
+        }
+
+        else {
             return <PlayScreen 
                 room={room}
                 socket={socket}

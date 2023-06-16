@@ -10,13 +10,21 @@ export class SuecaServer {
     order = ['2', '3', '4', '5', '6', 'Q', 'J', 'K', '7', 'A'];
     round: [number, string][] = [];
     turn = 0;
-    trump: string;
-    cards: [string[], string[], string[], string[]];
+    trump: string = "";
+    cards: [string[], string[], string[], string[]] = [[], [], [], []];
     points = [0, 0];
 
-    constructor() {
+    start() {
         this.cards = this.deal();
         this.trump = this.cards[0][0];
+    }
+
+    from(obj: SuecaServer) {
+        this.round = obj.round;
+        this.turn = obj.turn;
+        this.trump = obj.trump;
+        this.cards = obj.cards;
+        this.points = obj.points;
     }
 
     sum(arr: number[]): number {
@@ -79,7 +87,7 @@ export class SuecaServer {
 
         assert(player === this.turn);
         assert(this.cards[player].includes(card));
-        assert(this.round.length == 0 || card[1] == this.round[0][1][1]);
+        assert(this.round.length === 0 || card[1] === this.round[0][1][1] || !this.cards[player].map(c => c[1]).includes(this.round[0][1][1]));
 
         this.round.push([player, card]);
 
