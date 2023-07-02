@@ -1,12 +1,28 @@
 import assert from 'node:assert';
 import { getCookie, setCookie, deleteCookie, hasCookie } from 'cookies-next';
 import { useRouter } from 'next/router'
-import { useState, useEffect, useMemo, Dispatch, SetStateAction, ReactNode, ReactElement } from 'react';
+import { useState, useEffect, useRef, useReducer, Dispatch, SetStateAction, ReactNode, ReactElement } from 'react';
 import { io, Socket } from "socket.io-client";
 import { SocketMessage, SocketMessageType } from '../../lib/socket_types';
 import cardImages from '../../lib/cardImages';
 import tableImage from '../../images/table.svg';
 import Image from 'next/image';
+
+interface State {
+    roomExists: boolean,
+    room: string,
+    inGame: boolean,
+    username: string, 
+    team1: string[],
+    team2: string[],
+    cards: string[],
+    trump: string,
+    round: [number, string][],
+    turn: number,
+    playerNumber: number,
+    points: [number, number],
+    socket: Socket | undefined,
+}
 
 function UserCards({round, cards, activeCard, setActiveCard, validateMove, handlePlay}: 
     {
@@ -59,36 +75,32 @@ function UserMove({round, playerNumber}: {round: [number, string][], playerNumbe
     );
 }
 
-function PlayScreen({room, socket, team1, team2, username, playerNumber, cards, setCards, trump, round, turn, points}:
-    {
-        room: string, socket: Socket, team1: string[], team2: string[], username: string, playerNumber: number, cards: string[],
-        setCards: Dispatch<SetStateAction<string[]>>, trump: string, round: [number, string][], turn: number, points: number[]
-    }) 
+function PlayScreen({state, dispatch}: {state: State, dispatch: React.Dispatch<{type: string, value: any}>})
 
 {
     let [activeCard, setActiveCard] = useState("");
 
     function validateMove(card: string): boolean {
-        return playerNumber === turn &&
-        cards.includes(card) &&
-        (round.length === 0 || card[1] === round[0][1][1] || !cards.map(c => c[1]).includes(round[0][1][1]));
+        return state.playerNumber === state.turn &&
+        state.cards.includes(card) &&
+        (state.round.length === 0 || card[1] === state.round[0][1][1] || !state.cards.map(c => c[1]).includes(state.round[0][1][1]));
     }
 
     function handlePlay(card: string) {
         let m: SocketMessage = {
             type: SocketMessageType.Play,
             body: {
-                user_id: getCookie(`sueca:${room}:user_id`),
+                user_id: getCookie(`sueca:${state.room}:user_id`),
                 card: card,
             }
         }
 
-        socket.emit("message", room, m);
+        state.socket!.emit("message", state.room, m);
         setActiveCard("");
     }
 
-    let all: [string, number][] = [team1[0], team2[0], team1[1], team2[1]].map((element, index) => [element, index]);
-    let order: [string, number][] = playerNumber > 0 ? all.slice(playerNumber - 1).concat(all.slice(0, playerNumber - 1)) : all; // bottom left top right
+    let all: [string, number][] = [state.team1[0], state.team2[0], state.team1[1], state.team2[1]].map((element, index) => [element, index]);
+    let order: [string, number][] = state.playerNumber > 0 ? all.slice(state.playerNumber - 1).concat(all.slice(0, state.playerNumber - 1)) : all; // bottom left top right
 
     let usernames: string[] = order.map(([u, n]) => u);
     let usernameNumbers: number[] = order.map(([u, n]) => n);
@@ -106,7 +118,7 @@ function PlayScreen({room, socket, team1, team2, username, playerNumber, cards, 
                 </span>
 
                 <div className="absolute top-[70%] left-1/2 -translate-x-1/2 -translate-y-1/2">
-                    <UserMove round={round} playerNumber={usernameNumbers[0]} />
+                    <UserMove round={state.round} playerNumber={usernameNumbers[0]} />
                 </div>
 
                 <span className="absolute top-1/2 -translate-y-1/2 left-[10%] -translate-x-[10%]">
@@ -114,7 +126,7 @@ function PlayScreen({room, socket, team1, team2, username, playerNumber, cards, 
                 </span>
 
                 <div className="absolute top-1/2 left-[20%] -translate-x-1/2 -translate-y-1/2">
-                    <UserMove round={round} playerNumber={usernameNumbers[1]} />
+                    <UserMove round={state.round} playerNumber={usernameNumbers[1]} />
                 </div>
 
                 <span className="absolute top-[10%] left-1/2 -translate-x-1/2 ">
@@ -122,7 +134,7 @@ function PlayScreen({room, socket, team1, team2, username, playerNumber, cards, 
                 </span>
 
                 <div className="absolute top-[30%] left-1/2 -translate-x-1/2 -translate-y-1/2">
-                    <UserMove round={round} playerNumber={usernameNumbers[2]} />
+                    <UserMove round={state.round} playerNumber={usernameNumbers[2]} />
                 </div>
 
                 <span className="absolute top-1/2 -translate-y-1/2 left-[90%] -translate-x-[90%]">
@@ -130,60 +142,58 @@ function PlayScreen({room, socket, team1, team2, username, playerNumber, cards, 
                 </span>
 
                 <div className="absolute top-1/2 left-[80%] -translate-x-1/2 -translate-y-1/2">
-                    <UserMove round={round} playerNumber={usernameNumbers[3]} />
+                    <UserMove round={state.round} playerNumber={usernameNumbers[3]} />
                 </div>
             </div>
 
-            {cards && <UserCards round={round} cards={cards} activeCard={activeCard} setActiveCard={setActiveCard} validateMove={validateMove} handlePlay={handlePlay}/>}
+            {state.cards && <UserCards round={state.round} cards={state.cards} activeCard={activeCard} setActiveCard={setActiveCard} validateMove={validateMove} handlePlay={handlePlay}/>}
 
         </div>
     );
 }
 
-function JoinTeamScreen({room, socket, team1, team2, username, setUsername}:
-    {room: string, socket: Socket, team1: string[], team2: string[], username: string, setUsername: Dispatch<SetStateAction<string>>}) 
-
+function JoinTeamScreen({state, dispatch}: {state: State, dispatch: React.Dispatch<{type: string, value: any}>})
 {
     function joinTeam(team: number) {
-        if (!username) {
+        if (!state.username) {
             alert("Precisas de um username para jogar!");
             return;
         }
 
-        if ( (team === 1 && team1.includes(username)) || (team === 2 && team2.includes(username)) ) {
+        if ( (team === 1 && state.team1.includes(state.username)) || (team === 2 && state.team2.includes(state.username)) ) {
             alert("Username duplicado");
             return;
         }
 
-        let user_id = getCookie(`sueca:${room}:user_id`);
+        let user_id = getCookie(`sueca:${state.room}:user_id`);
 
         let m: SocketMessage = {
             type: SocketMessageType.JoinTeam,
             body: {
                 team: team,
-                username: username,
+                username: state.username,
                 user_id: user_id,
             }
         };
 
-        socket.emit("message", room, m);
+        state.socket!.emit("message", state.room, m);
     }
 
 
     function leaveTeam(team: number) {
-        let user_id = getCookie(`sueca:${room}:user_id`);
+        let user_id = getCookie(`sueca:${state.room}:user_id`);
 
         let m: SocketMessage = {
             type: SocketMessageType.LeaveTeam,
             body: {
                 team: team,
-                username: username,
+                username: state.username,
                 user_id: user_id,
             }
         };
 
-        socket.emit("message", room, m);
-        deleteCookie(`sueca:${room}:user_id`);
+        state.socket!.emit("message", state.room, m);
+        deleteCookie(`sueca:${state.room}:user_id`);
     }
 
     function startGame() {
@@ -191,11 +201,11 @@ function JoinTeamScreen({room, socket, team1, team2, username, setUsername}:
             type: SocketMessageType.StartGame,
         };
 
-        socket.emit("message", room, m);
+        state.socket!.emit("message", state.room, m);
     }
 
     function onUsernameChange(event: React.ChangeEvent<HTMLInputElement>) {
-        setUsername(event.target.value);
+        dispatch({type: "setUsername", value: event.target.value });
     }
 
     return (
@@ -206,8 +216,8 @@ function JoinTeamScreen({room, socket, team1, team2, username, setUsername}:
                     @
                 </span>
                 <input type="text" id="username" maxLength={16} 
-                    disabled={team1.includes(username) || team2.includes(username)} 
-                    value={username}
+                    disabled={state.team1.includes(state.username) || state.team2.includes(state.username)} 
+                    value={state.username}
                     onChange={onUsernameChange} 
                     className="rounded-none rounded-r-lg bg-gray-50 border text-gray-900 focus:ring-blue-500 focus:border-blue-500 w-full text-sm border-gray-300 p-2.5
                     dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
@@ -221,11 +231,11 @@ function JoinTeamScreen({room, socket, team1, team2, username, setUsername}:
                             Equipa Azul
                         </h1>
 
-                        {team1.length > 0 && team1.map(u1 => {
+                        {state.team1.length > 0 && state.team1.map(u1 => {
                             return <span key={u1} className="bg-gray-200 rounded-full px-3 py-1 text-center text-sm font-semibold text-gray-700 mr-2 mb-2">@{u1}</span>
                         })}
 
-                        {!team1.includes(username) && team1.length < 4 &&
+                        {!state.team1.includes(state.username) && state.team1.length < 4 &&
                             <button onClick={ () => joinTeam(1) } 
                                 className="text-center w-30 h-10 mt-2 mb-4 px-6 py-2 bg-blue-700 text-white hover:bg-blue-800
                                 font-semibold rounded-lg border-solid">
@@ -233,7 +243,7 @@ function JoinTeamScreen({room, socket, team1, team2, username, setUsername}:
                             </button>
                         }
 
-                        {team1.includes(username) && 
+                        {state.team1.includes(state.username) && 
                             <button onClick={ () => leaveTeam(1) } 
                                 className="text-center w-30 h-10 mt-2 mb-4 px-6 py-2 bg-blue-700 text-white hover:bg-blue-800
                                 font-semibold rounded-lg border-solid">
@@ -249,11 +259,11 @@ function JoinTeamScreen({room, socket, team1, team2, username, setUsername}:
                             Equipa Laranja
                         </h1>
 
-                        {team2.length > 0 && team2.map(u2 => {
+                        {state.team2.length > 0 && state.team2.map(u2 => {
                             return <span key={u2} className="bg-gray-200 rounded-full px-3 py-1 text-center text-sm font-semibold text-gray-700 mr-2 mb-2">@{u2}</span>
                         })}
 
-                        {!team2.includes(username) && team2.length < 4 &&
+                        {!state.team2.includes(state.username) && state.team2.length < 4 &&
                             <button onClick={ () => joinTeam(2) } 
                                 className="text-center w-30 h-10 mt-2 mb-4 px-6 py-2 bg-blue-700 text-white hover:bg-blue-800
                                 font-semibold rounded-lg border-solid">
@@ -261,7 +271,7 @@ function JoinTeamScreen({room, socket, team1, team2, username, setUsername}:
                             </button>
                         }
 
-                        {team2.includes(username) && 
+                        {state.team2.includes(state.username) && 
                             <button onClick={ () => leaveTeam(2) } 
                                 className="text-center w-30 h-10 mt-2 mb-4 px-6 py-2 bg-blue-700 text-white hover:bg-blue-800
                                 font-semibold rounded-lg border-solid">
@@ -273,7 +283,7 @@ function JoinTeamScreen({room, socket, team1, team2, username, setUsername}:
                 </div>
             </div>
 
-            {(team1.includes(username) || team2.includes(username)) && team1.length === 2 && team2.length === 2 &&
+            {(state.team1.includes(state.username) || state.team2.includes(state.username)) && state.team1.length === 2 && state.team2.length === 2 &&
                 <button onClick={startGame} 
                     className="text-center w-30 h-10 mt-2 mb-4 px-6 py-2 bg-blue-700 text-white hover:bg-blue-800
                     font-semibold rounded-lg border-solid">
@@ -294,10 +304,14 @@ export default function Page() {
 
     let [inGame, setInGame] = useState(false);
 
-    let [username, setUsername] = useState("");
+    let [username, setUsername, usernameRef] = [...useState(""), useRef("")];
+    usernameRef.current = username;
 
-    let [team1, setTeam1] = useState([] as string[]);
-    let [team2, setTeam2] = useState([] as string[]);
+    let [team1, setTeam1, team1Ref] = [...useState([] as string[]), useRef([] as string[])];
+    let [team2, setTeam2, team2Ref] = [...useState([] as string[]), useRef([] as string[])];
+
+    team1Ref.current = team1;
+    team2Ref.current = team2;
 
     let [cards, setCards] = useState([] as string[]);
     let [trump, setTrump] = useState("");
@@ -308,6 +322,104 @@ export default function Page() {
     let [points, setPoints] = useState([0, 0]);
 
     let [socket, setSocket] = useState<Socket | undefined>(undefined);
+
+    function reducer(state: State, action: {type: string, value: any}) {
+        switch (action.type) {
+            case 'setRoomExists':
+                return {
+                    ...state,
+                    roomExists: action.value,
+                }
+
+            case 'setInGame':
+                return {
+                    ...state,
+                    inGame: action.value,
+                }
+
+            case 'setUsername':
+                return {
+                    ...state,
+                    username: action.value,
+                }
+
+            case 'setTeam1':
+                return {
+                    ...state,
+                    team1: action.value,
+                }
+
+            case 'setTeam2':
+                return {
+                    ...state,
+                    team2: action.value,
+                }
+
+            case 'setCards':
+                return {
+                    ...state,
+                    cards: action.value,
+                }
+
+            case 'setTrump':
+                return {
+                    ...state,
+                    trump: action.value,
+                }
+
+            case 'setRound':
+                return {
+                    ...state,
+                    round: action.value,
+                }
+
+            case 'setTurn':
+                return {
+                    ...state,
+                    turn: action.value,
+                }
+
+            case 'setPlayerNumber':
+                return {
+                    ...state,
+                    playerNumber: action.value,
+                }
+
+            case 'setPoints':
+                return {
+                    ...state,
+                    points: action.value,
+                }
+
+            case 'setSocket':
+                return {
+                    ...state,
+                    socket: action.value,
+                }
+
+            default:
+                return state;
+        } 
+    };
+
+    const [state, dispatch] = useReducer(reducer, {
+        roomExists: false,
+        room: room,
+        inGame: false,
+        username: "", 
+        team1: [],
+        team2: [],
+        cards: [],
+        trump: "",
+        round: [],
+        turn: -1,
+        playerNumber: -1,
+        points: [],
+        socket: undefined,
+    });
+
+    let stateRef = useRef<State>(state);
+    stateRef.current = state;
 
     useEffect(() => {
         if (room) {
@@ -333,7 +445,7 @@ export default function Page() {
                     let rRoom = message.body.room;
 
                     if (room === rRoom) {
-                        setRoomExists(true);
+                        dispatch({ type: "setRoomExists", value: true });
                     } 
 
                     break;
@@ -350,8 +462,13 @@ export default function Page() {
                     let t1 = message.body.team1;
                     let t2 = message.body.team2;
 
-                    setTeam1([...(t1 ? t1 : [])]);
-                    setTeam2([...(t2 ? t2 : [])]);
+                    console.log(team1, team2);
+
+                    dispatch({type: "setTeam1", value: t1});
+                    dispatch({type: "setTeam2", value: t2});
+
+                    // setTeam1([...(t1 ? t1 : [])]);
+                    // setTeam2([...(t2 ? t2 : [])]);
 
                     break;
                 }
@@ -360,19 +477,19 @@ export default function Page() {
                     let rCards = message.body.cards;
                     let rTrump = message.body.trump;
 
-                    let all = [team1[0], team2[0], team1[1], team2[1]];
-                    setPlayerNumber(all.indexOf(username) + 1);
+                    let all = [stateRef.current.team1[0], stateRef.current.team2[0], stateRef.current.team1[1], stateRef.current.team2[1]];
+                    dispatch({ type: "setPlayerNumber", value: all.indexOf(stateRef.current.username!) + 1 });
 
-                    setInGame(true);
-                    setCards(rCards);
-                    setTrump(rTrump);
+                    dispatch({ type: "setInGame", value: true });
+                    dispatch({ type: "setCards", value: rCards });
+                    dispatch({ type: "setTrump", value: rTrump });
 
                     break;
                 }
 
                 case SocketMessageType.Play: {
                     let rCards = message.body.cards;
-                    setCards(rCards);
+                    dispatch({ type: "setCards", value: rCards });
 
                     break;
                 }
@@ -383,10 +500,10 @@ export default function Page() {
                     let rPoints = message.body.points;
                     let game_over = message.body.game_over;
 
-                    setRound(rRound);
-                    setTurn(rTurn);
+                    dispatch({ type: "setRound", value: rRound });
+                    dispatch({ type: "setTurn", value: rTurn });
                     
-                    if (round.length === 4 && !game_over) {
+                    if (rRound.length === 4 && !game_over) {
                         setTimeout(() => {
                             setRound(currentRound => currentRound.length !== 4 ? currentRound : []);
                             setPoints(currentPoints => currentPoints > rPoints ? currentPoints : rPoints);
@@ -394,7 +511,7 @@ export default function Page() {
                     } 
 
                     else {
-                        setPoints(rPoints);
+                        dispatch({ type: "setPoints", value: rPoints });
                     }
 
                     if (game_over) {
@@ -406,7 +523,7 @@ export default function Page() {
                 }
 
                 case SocketMessageType.JoinRoom: {
-                    setInGame(true);
+                    dispatch({ type: "setInGame", value: true });
 
                     let rUsername = message.body.username;
                     let rCards = message.body.cards;
@@ -416,14 +533,14 @@ export default function Page() {
                     let rPoints = message.body.points;
 
                     if (rUsername && rCards) {
-                        setUsername(rUsername);
-                        setCards(rCards);
+                        dispatch({ type: "setUsername", value: rUsername });
+                        dispatch({ type: "setCards", value: rCards });
                     }
 
-                    setRound(rRound);
-                    setTurn(rTurn);
-                    setTrump(rTrump);
-                    setPoints(rPoints);
+                    dispatch({ type: "setRound", value: rRound });
+                    dispatch({ type: "setTurn", value: rTurn });
+                    dispatch({ type: "setTrump", value: rTrump });
+                    dispatch({ type: "setPoints", value: rPoints });
                 }
             }
 
@@ -441,36 +558,22 @@ export default function Page() {
         // console.log(room, m);
         socket.emit("message", room, m);
 
-        setSocket(socket);
+        dispatch({ type: "setSocket", value: socket });
     }
 
 
     if (socket && room && roomExists) {
         if (!inGame) {
             return <JoinTeamScreen 
-                room={room}
-                socket={socket}
-                team1={team1}
-                team2={team2}
-                username={username}
-                setUsername={setUsername}
+                state={state}
+                dispatch={dispatch}
             />;
         }
 
         else {
             return <PlayScreen 
-                room={room}
-                socket={socket}
-                team1={team1}
-                team2={team2}
-                username={username}
-                playerNumber={playerNumber}
-                cards={cards}
-                setCards={setCards}
-                trump={trump}
-                round={round}
-                turn={turn}
-                points={points}
+                state={state}
+                dispatch={dispatch}
             />;
         }
     }
