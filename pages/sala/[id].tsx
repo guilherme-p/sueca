@@ -300,29 +300,6 @@ export default function Page() {
     const { id } = router.query;
     const room = id ? (Array.isArray(id) ? id[0] : id) : ""; // query string can be longer than one param, even though it shouldnt
 
-    let [roomExists, setRoomExists] = useState(false);
-
-    let [inGame, setInGame] = useState(false);
-
-    let [username, setUsername, usernameRef] = [...useState(""), useRef("")];
-    usernameRef.current = username;
-
-    let [team1, setTeam1, team1Ref] = [...useState([] as string[]), useRef([] as string[])];
-    let [team2, setTeam2, team2Ref] = [...useState([] as string[]), useRef([] as string[])];
-
-    team1Ref.current = team1;
-    team2Ref.current = team2;
-
-    let [cards, setCards] = useState([] as string[]);
-    let [trump, setTrump] = useState("");
-
-    let [round, setRound] = useState([] as [number, string][]);
-    let [turn, setTurn] = useState(0);
-    let [playerNumber, setPlayerNumber] = useState(0);
-    let [points, setPoints] = useState([0, 0]);
-
-    let [socket, setSocket] = useState<Socket | undefined>(undefined);
-
     function reducer(state: State, action: {type: string, value: any}) {
         switch (action.type) {
             case 'setRoomExists':
@@ -427,8 +404,8 @@ export default function Page() {
         }
 
         return () => {
-            if (socket && !socket.disconnected) {
-                socket.disconnect();
+            if (state.socket && !state.socket.disconnected) {
+                state.socket.disconnect();
             }
         };
     }, [room]); // router.query is hydrated after initial page load, so room starts off empty
@@ -462,7 +439,7 @@ export default function Page() {
                     let t1 = message.body.team1;
                     let t2 = message.body.team2;
 
-                    console.log(team1, team2);
+                    // console.log(team1, team2);
 
                     dispatch({type: "setTeam1", value: t1});
                     dispatch({type: "setTeam2", value: t2});
@@ -505,8 +482,11 @@ export default function Page() {
                     
                     if (rRound.length === 4 && !game_over) {
                         setTimeout(() => {
-                            setRound(currentRound => currentRound.length !== 4 ? currentRound : []);
-                            setPoints(currentPoints => currentPoints > rPoints ? currentPoints : rPoints);
+                            let currentRound = stateRef.current.round;
+                            let currentPoints = stateRef.current.points;
+
+                            dispatch({ type: "setRound", value: (currentRound.length !== 4 ? currentRound : []) });
+                            dispatch({ type: "setPoints", value: (currentPoints > rPoints ? currentPoints : rPoints) });
                         }, 3000);
                     } 
 
@@ -562,8 +542,8 @@ export default function Page() {
     }
 
 
-    if (socket && room && roomExists) {
-        if (!inGame) {
+    if (state.socket && state.room && state.roomExists) {
+        if (!state.inGame) {
             return <JoinTeamScreen 
                 state={state}
                 dispatch={dispatch}
