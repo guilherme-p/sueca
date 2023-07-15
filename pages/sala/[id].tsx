@@ -37,7 +37,7 @@ function UserCards({round, cards, activeCard, setActiveCard, validateMove, handl
                 {
                     cards.map(c => 
                         <button key={c} disabled={!validateMove(c)} onClick={() => setActiveCard(c)} 
-                            className={`${activeCard === c ? "border-2 border-solid border-red-500 rounded-lg " : ""}` + "disabled:opacity-50"}>
+                            className={`${activeCard === c ? "border-2 border-solid border-red-500 rounded-lg " : ""} disabled:opacity-50`}>
                             {cardImages[c]}
                         </button>
                     )
@@ -107,6 +107,21 @@ function PlayScreen({state, dispatch}: {state: State, dispatch: React.Dispatch<{
 
     return (
         <div className="container h-screen w-screen flex flex-col items-center justify-center relative">
+            <div className="mt-8 container flex flex-row justify-center header">
+                <div className="w-24 container mr-24">
+                    {cardImages[state.trump]}
+                </div>
+
+                <div className="flex justify-center items-center w-24 h-24 bg-blue-400 blue-points ">
+                    <span className="font-bold text-3xl">{state.points[0]}</span>
+                </div>
+
+                <div className="flex justify-center items-center w-24 h-24 bg-orange-400 text-center orange-points">
+                    <span className="font-bold text-3xl">{state.points[1]}</span>
+                </div>
+
+            </div>
+
             <div className="mt-8 inline-block relative">
                 <Image
                     src={tableImage}
@@ -114,7 +129,7 @@ function PlayScreen({state, dispatch}: {state: State, dispatch: React.Dispatch<{
                 />
 
                 <span className={`absolute top-[90%] left-1/2 -translate-x-1/2 -translate-y-1/2 p-4 rounded-3xl
-                                 ${usernameNumbers[0] % 2 === 0 ? "bg-blue-400" : "bg-orange-400"}`}
+                    ${usernameNumbers[0] % 2 === 0 ? "bg-blue-400" : "bg-orange-400"} ${state.turn === 0 ? "border-4 border-black" : ""}`}
                 >
                     {usernames[0]}
                 </span>
@@ -124,17 +139,17 @@ function PlayScreen({state, dispatch}: {state: State, dispatch: React.Dispatch<{
                 </div>
 
                 <span className={`absolute top-1/2 -translate-y-1/2 left-[10%] -translate-x-1/2 p-4 rounded-3xl 
-                                 ${usernameNumbers[1] % 2 === 0 ? "bg-blue-400" : "bg-orange-400"}`}
+                    ${usernameNumbers[1] % 2 === 0 ? "bg-blue-400" : "bg-orange-400"} ${state.turn === 1 ? "border-4 border-black" : ""}`}
                 >
                     {usernames[1]}
                 </span>
 
-                <div className="absolute top-1/2 left-[22.5%] -translate-x-1/2 -translate-y-1/2">
+                <div className="absolute top-1/2 left-[30%] -translate-x-1/2 -translate-y-1/2">
                     <UserMove round={state.round} playerNumber={usernameNumbers[1]} />
                 </div>
 
                 <span className={`absolute top-[10%] left-1/2 -translate-x-1/2 -translate-y-1/2 p-4 rounded-3xl
-                                 ${usernameNumbers[2] % 2 === 0 ? "bg-blue-400" : "bg-orange-400"}`}
+                    ${usernameNumbers[2] % 2 === 0 ? "bg-blue-400" : "bg-orange-400"} ${state.turn === 2 ? "border-4 border-black" : ""}`}
                 >
                     {usernames[2]}
                 </span>
@@ -144,12 +159,12 @@ function PlayScreen({state, dispatch}: {state: State, dispatch: React.Dispatch<{
                 </div>
 
                 <span className={`absolute top-1/2 -translate-y-1/2 left-[90%] -translate-x-1/2 p-4 rounded-3xl
-                                 ${usernameNumbers[3] % 2 === 0 ? "bg-blue-400" : "bg-orange-400"}`}
+                    ${usernameNumbers[3] % 2 === 0 ? "bg-blue-400" : "bg-orange-400"} ${state.turn === 3 ? "border-4 border-black" : ""}`}
                 >
                     {usernames[3]}
                 </span>
 
-                <div className="absolute top-1/2 left-[77.5%] -translate-x-1/2 -translate-y-1/2">
+                <div className="absolute top-1/2 left-[70%] -translate-x-1/2 -translate-y-1/2">
                     <UserMove round={state.round} playerNumber={usernameNumbers[3]} />
                 </div>
             </div>
