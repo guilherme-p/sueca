@@ -84,6 +84,15 @@ export default async function SocketHandler(req: NextApiRequest, res: NextApiRes
                     let team2 = await redis.lRange(`${room}:team2`, 0, -1);
                     let all = [team1[0], team2[0], team1[1], team2[1]];
 
+                    m = {
+                        type: SocketMessageType.Teams,
+                        body: {
+                            team1: team1,
+                            team2: team2,
+                        }
+                    }
+
+                    socket.emit("message", m);
 
                     if (inGame) {
                         let game = await redis.hGet(room, "game") as string;
@@ -91,8 +100,9 @@ export default async function SocketHandler(req: NextApiRequest, res: NextApiRes
                         game_obj.from(JSON.parse(game));
 
                         if (user_id !== undefined) {
-                            let username = await redis.hGet(`${room}:id_to_username`, user_id);
-                            let playing = username && all.includes(username); 
+                            let username: string | undefined = await redis.hGet(`${room}:id_to_username`, user_id);
+                            let playing: boolean = username !== undefined && username !== "" && all.includes(username); 
+                            console.log(all, username, playing);
 
                             if (playing) {
                                 let player_n = all.indexOf(username as string);
@@ -147,15 +157,21 @@ export default async function SocketHandler(req: NextApiRequest, res: NextApiRes
                         }
                     }
 
-                    m = {
-                        type: SocketMessageType.Teams,
-                        body: {
-                            team1: team1,
-                            team2: team2,
+                    else {
+                        if (user_id !== undefined) {
+                            let username: string | undefined = await redis.hGet(`${room}:id_to_username`, user_id);
+                            if (username) {
+                                m = {
+                                    type: SocketMessageType.JoinRoom,
+                                    body: {
+                                        username: username,
+                                    }
+                                }
+
+                                socket.emit("message", m);
+                            }
                         }
                     }
-
-                    socket.emit("message", m);
 
                     break;
                 } 
@@ -245,6 +261,9 @@ export default async function SocketHandler(req: NextApiRequest, res: NextApiRes
                     let auth: boolean = username === await redis.hGet(`${room}:id_to_username`, user_id);
                     assert(auth);
 
+                    let team_arr = await redis.lRange(`${room}:team${team}`, 0, -1);
+                    assert(team_arr.includes(username));
+
                     await redis.hDel(`socket_to_room`, socket.id);
                     await redis.hDel(`${room}:username_to_socket`, username);
                     await redis.hDel(`${room}:socket_to_username`, socket.id);
@@ -269,6 +288,12 @@ export default async function SocketHandler(req: NextApiRequest, res: NextApiRes
                 }
 
                 case SocketMessageType.StartGame: {
+                    let username = message.body.username;
+                    let user_id = message.body.user_id;
+
+                    let auth: boolean = username === await redis.hGet(`${room}:id_to_username`, user_id);
+                    assert(auth);
+
                     assert(await redis.sIsMember("rooms", room));
                     assert(!await redis.hExists(room, "game"));
 
@@ -370,14 +395,24 @@ export default async function SocketHandler(req: NextApiRequest, res: NextApiRes
 
                     let game_obj: SuecaServer = new SuecaServer();
                     game_obj.from(JSON.parse(game));
+                    console.log("game", game, game_obj);
 
                     let game_over: boolean = game_obj.play(player_n, card);
 
-                    await redis.hSet(room, "game", JSON.stringify(game));
+                    await redis.hSet(room, "game", JSON.stringify(game_obj));
 
                     let player_socket = await redis.hGet(`${room}:username_to_socket`, username) as string;
 
                     let m: SocketMessage = {
+                        type: SocketMessageType.Play,
+                        body: {
+                            cards: game_obj.cards[player_n],
+                        }
+                    };
+
+                    socket.emit("message", m);
+
+                    m = {
                         type: SocketMessageType.Round,
                         body: {
                             round: game_obj.round,
@@ -389,15 +424,6 @@ export default async function SocketHandler(req: NextApiRequest, res: NextApiRes
 
                     io.to(room).emit("message", m);
 
-                    m = {
-                        type: SocketMessageType.Play,
-                        body: {
-                            cards: game_obj.cards[player_n],
-                        }
-                    };
-
-                    io.to(player_socket).emit("message", m);
-
                     if (game_over) {
                         cleanupRoom(room);
                     }
@@ -407,7 +433,7 @@ export default async function SocketHandler(req: NextApiRequest, res: NextApiRes
 
         socket.on("disconnect", (reason) => {
             console.log("disconnect reason: " + reason);
-            cleanupSocket(socket.id);
+            // cleanupSocket(socket.id);
         });
 
     });

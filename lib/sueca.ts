@@ -52,6 +52,8 @@ export class SuecaServer {
         let points = 0;
 
         for (let [p, c] of this.round) {
+            points += this.values[c[0] as keyof typeof this.values];
+
             let [wp, wc] = winner;
 
             if (wp == -1) {
@@ -70,8 +72,6 @@ export class SuecaServer {
                     winner = [p, c];
                 }
             }
-
-            points += this.values[c[0] as keyof typeof this.values];
         }
 
         return [winner[0], points];

@@ -3,7 +3,7 @@ import { io } from "socket.io-client";
 import { SocketMessage, SocketMessageType } from '../lib/socket_types';
 
 const url = process.env.URL || "http://localhost:3000";
-const room: string = process.env.ROOM || "9ebe48c9";
+const room: string = process.env.ROOM || "701aee75";
 const team1: number = Number(process.env.TEAM1) || 1;
 const team2: number = Number(process.env.TEAM2) || 2;
 
@@ -12,14 +12,16 @@ type MockPlayer = {
     username?: string,
     cards?: string[],
     round?: [number, string][],
-    turn?: number,
+    turn?: number, 
     trump?: string,
     points?: [number, number],
     playerNumber?: number,
     team1?: [string, string],
     team2?: [string, string],
+    game_over?: boolean,
 };
 
+const sleep = (waitTimeInMs: number) => new Promise(resolve => setTimeout(resolve, waitTimeInMs));
 
 function generateMove(player: MockPlayer): string {
     assert(player.cards && player.round);
@@ -46,22 +48,21 @@ const run = (team: number, username: string) => {
     });
 
 
-    socket.on("message", (message) => {
-        console.log(message);
+    socket.on("message", async (message) => {
+        console.log(message, message.body.round);
+        assert(playerMap.has(username));
+        let player: MockPlayer = playerMap.get(username)!;
+        console.log(player);
+        console.log("");
+
         switch (message.type) {
             case SocketMessageType.UserId: {
-                assert(playerMap.has(username));
-                let player: MockPlayer = playerMap.get(username) as MockPlayer;
-
                 player.user_id = message.body.user_id;
 
                 break;
             }
 
             case SocketMessageType.Teams: {
-                assert(playerMap.has(username));
-                let player: MockPlayer = playerMap.get(username) as MockPlayer;
-
                 player.team1 = message.body.team1;
                 player.team2 = message.body.team2;
 
@@ -69,35 +70,36 @@ const run = (team: number, username: string) => {
             }
 
             case SocketMessageType.Deal: {
-                assert(playerMap.has(username));
-                let player: MockPlayer = playerMap.get(username) as MockPlayer;
-
                 player.cards = message.body.cards;
                 player.trump = message.body.trump;
 
                 assert(player.team1 && player.team2);
 
                 let all = [player.team1[0], player.team2[0], player.team1[1], player.team2[1]];
-                player.playerNumber = all.indexOf(username) + 1;
+                player.playerNumber = all.indexOf(username);
 
                 break;
             }
 
             case SocketMessageType.Play: {
-                assert(playerMap.has(username));
-                let player: MockPlayer = playerMap.get(username) as MockPlayer;
-
                 player.cards = message.body.cards;
 
                 break;
             }
 
             case SocketMessageType.Round: {
-                assert(playerMap.has(username));
-                let player: MockPlayer = playerMap.get(username) as MockPlayer;
-
                 player.round = message.body.round;
                 player.points = message.body.points;
+                player.game_over = message.body.game_over;
+
+                if (player.game_over) {
+                    socket.disconnect();
+                    return;
+                }
+
+                if (player.round?.length === 4) {
+                    player.round = [];
+                }
 
                 let turn = message.body.turn;
                 if (turn === player.playerNumber) {
@@ -112,6 +114,7 @@ const run = (team: number, username: string) => {
                         }
                     };
 
+                    await sleep(2000);
                     socket.emit("message", room, m);
                 }
 
@@ -122,6 +125,15 @@ const run = (team: number, username: string) => {
     });
 
     let m: SocketMessage = {
+        type: SocketMessageType.JoinRoom,
+        body: {
+            room: room,
+        }
+    };
+
+    socket.emit("message", room, m);
+
+    m = {
         type: SocketMessageType.JoinTeam,
         body: {
             team: team,

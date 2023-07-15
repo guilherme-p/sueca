@@ -5,7 +5,7 @@ import { useState, useEffect, useRef, useReducer, Dispatch, SetStateAction, Reac
 import { io, Socket } from "socket.io-client";
 import { SocketMessage, SocketMessageType } from '../../lib/socket_types';
 import cardImages from '../../lib/cardImages';
-import tableImage from '../../images/table.svg';
+import tableImage from '../../images/table2.svg';
 import Image from 'next/image';
 
 interface State {
@@ -28,9 +28,9 @@ function UserCards({round, cards, activeCard, setActiveCard, validateMove, handl
     {
         round: [number, string][], cards: string[], activeCard: string, setActiveCard: Dispatch<SetStateAction<string>>, 
         validateMove: (card: string) => boolean, handlePlay: (card: string) => void
-    }): ReactElement 
+    }
+): ReactElement 
 {
-
     return (
         <div className="my-2 flex flex-col gap-4 justify-center items-center">
             <div className="flex flex-row gap-1 container relative">
@@ -107,41 +107,49 @@ function PlayScreen({state, dispatch}: {state: State, dispatch: React.Dispatch<{
 
     return (
         <div className="container h-screen w-screen flex flex-col items-center justify-center relative">
-            <div className="inline-block relative">
+            <div className="mt-8 inline-block relative">
                 <Image
                     src={tableImage}
                     alt="Card table"
                 />
 
-                <span className="absolute top-[90%] left-1/2 -translate-x-1/2 text-center">
+                <span className={`absolute top-[90%] left-1/2 -translate-x-1/2 -translate-y-1/2 p-4 rounded-3xl
+                                 ${usernameNumbers[0] % 2 === 0 ? "bg-blue-400" : "bg-orange-400"}`}
+                >
                     {usernames[0]}
                 </span>
 
-                <div className="absolute top-[70%] left-1/2 -translate-x-1/2 -translate-y-1/2">
+                <div className="absolute top-[67.5%] left-1/2 -translate-x-1/2 -translate-y-1/2 ">
                     <UserMove round={state.round} playerNumber={usernameNumbers[0]} />
                 </div>
 
-                <span className="absolute top-1/2 -translate-y-1/2 left-[10%] -translate-x-[10%]">
+                <span className={`absolute top-1/2 -translate-y-1/2 left-[10%] -translate-x-1/2 p-4 rounded-3xl 
+                                 ${usernameNumbers[1] % 2 === 0 ? "bg-blue-400" : "bg-orange-400"}`}
+                >
                     {usernames[1]}
                 </span>
 
-                <div className="absolute top-1/2 left-[20%] -translate-x-1/2 -translate-y-1/2">
+                <div className="absolute top-1/2 left-[22.5%] -translate-x-1/2 -translate-y-1/2">
                     <UserMove round={state.round} playerNumber={usernameNumbers[1]} />
                 </div>
 
-                <span className="absolute top-[10%] left-1/2 -translate-x-1/2 ">
+                <span className={`absolute top-[10%] left-1/2 -translate-x-1/2 -translate-y-1/2 p-4 rounded-3xl
+                                 ${usernameNumbers[2] % 2 === 0 ? "bg-blue-400" : "bg-orange-400"}`}
+                >
                     {usernames[2]}
                 </span>
 
-                <div className="absolute top-[30%] left-1/2 -translate-x-1/2 -translate-y-1/2">
+                <div className="absolute top-[32.5%] left-1/2 -translate-x-1/2 -translate-y-1/2">
                     <UserMove round={state.round} playerNumber={usernameNumbers[2]} />
                 </div>
 
-                <span className="absolute top-1/2 -translate-y-1/2 left-[90%] -translate-x-[90%]">
+                <span className={`absolute top-1/2 -translate-y-1/2 left-[90%] -translate-x-1/2 p-4 rounded-3xl
+                                 ${usernameNumbers[3] % 2 === 0 ? "bg-blue-400" : "bg-orange-400"}`}
+                >
                     {usernames[3]}
                 </span>
 
-                <div className="absolute top-1/2 left-[80%] -translate-x-1/2 -translate-y-1/2">
+                <div className="absolute top-1/2 left-[77.5%] -translate-x-1/2 -translate-y-1/2">
                     <UserMove round={state.round} playerNumber={usernameNumbers[3]} />
                 </div>
             </div>
@@ -197,8 +205,14 @@ function JoinTeamScreen({state, dispatch}: {state: State, dispatch: React.Dispat
     }
 
     function startGame() {
+        let user_id = getCookie(`sueca:${state.room}:user_id`);
+
         let m: SocketMessage = {
             type: SocketMessageType.StartGame,
+            body: {
+                username: state.username,
+                user_id: user_id,
+            }
         };
 
         state.socket!.emit("message", state.room, m);
@@ -302,6 +316,12 @@ export default function Page() {
 
     function reducer(state: State, action: {type: string, value: any}) {
         switch (action.type) {
+            case 'setRoom':
+                return {
+                    ...state,
+                    room: action.value,
+                }
+
             case 'setRoomExists':
                 return {
                     ...state,
@@ -381,7 +401,7 @@ export default function Page() {
 
     const [state, dispatch] = useReducer(reducer, {
         roomExists: false,
-        room: room,
+        room: "",
         inGame: false,
         username: "", 
         team1: [],
@@ -389,7 +409,7 @@ export default function Page() {
         cards: [],
         trump: "",
         round: [],
-        turn: -1,
+        turn: 0,
         playerNumber: -1,
         points: [],
         socket: undefined,
@@ -400,7 +420,7 @@ export default function Page() {
 
     useEffect(() => {
         if (room) {
-            initSocket();
+            dispatch({ type: "setRoom", value: room});
         }
 
         return () => {
@@ -410,12 +430,29 @@ export default function Page() {
         };
     }, [room]); // router.query is hydrated after initial page load, so room starts off empty
 
+    useEffect(() => {
+        if (state.room) {
+            initSocket();
+        }
+
+    }, [state.room]);
+
+    useEffect(() => {
+        if (state.inGame) {
+            let all = [state.team1[0], state.team2[0], state.team1[1], state.team2[1]];
+            console.log(all, state.username)
+            dispatch({ type: "setPlayerNumber", value: all.indexOf(state.username!) });
+
+        }
+    }, [state.inGame]);
+
     async function initSocket() {
         await fetch("/api/socket");
         let socket = io();
 
         socket.on("message", async (message) => {
             console.log(message);
+            console.log(stateRef.current);
 
             switch (message.type) {
                 case SocketMessageType.RoomExists: {
@@ -430,7 +467,7 @@ export default function Page() {
 
                 case SocketMessageType.UserId: {
                     let user_id = message.body.user_id;
-                    setCookie(`sueca:${room}:user_id`, user_id, {maxAge: 60 * 60 * 24});
+                    setCookie(`sueca:${state.room}:user_id`, user_id, {maxAge: 60 * 60 * 24});
 
                     break;
                 }
@@ -439,13 +476,8 @@ export default function Page() {
                     let t1 = message.body.team1;
                     let t2 = message.body.team2;
 
-                    // console.log(team1, team2);
-
-                    dispatch({type: "setTeam1", value: t1});
-                    dispatch({type: "setTeam2", value: t2});
-
-                    // setTeam1([...(t1 ? t1 : [])]);
-                    // setTeam2([...(t2 ? t2 : [])]);
+                    dispatch({type: "setTeam1", value: [...t1]});
+                    dispatch({type: "setTeam2", value: [...t2]});
 
                     break;
                 }
@@ -453,9 +485,6 @@ export default function Page() {
                 case SocketMessageType.Deal: {
                     let rCards = message.body.cards;
                     let rTrump = message.body.trump;
-
-                    let all = [stateRef.current.team1[0], stateRef.current.team2[0], stateRef.current.team1[1], stateRef.current.team2[1]];
-                    dispatch({ type: "setPlayerNumber", value: all.indexOf(stateRef.current.username!) + 1 });
 
                     dispatch({ type: "setInGame", value: true });
                     dispatch({ type: "setCards", value: rCards });
@@ -495,7 +524,7 @@ export default function Page() {
                     }
 
                     if (game_over) {
-                        deleteCookie(`sueca:${room}:user_id`);
+                        deleteCookie(`sueca:${state.room}:user_id`);
                         socket.disconnect();
                     }
 
@@ -503,8 +532,6 @@ export default function Page() {
                 }
 
                 case SocketMessageType.JoinRoom: {
-                    dispatch({ type: "setInGame", value: true });
-
                     let rUsername = message.body.username;
                     let rCards = message.body.cards;
                     let rRound = message.body.round;
@@ -512,21 +539,30 @@ export default function Page() {
                     let rTrump = message.body.trump;
                     let rPoints = message.body.points;
 
-                    if (rUsername && rCards) {
+                    let playing: boolean = rCards !== undefined;
+                    let inGame: boolean = rRound !== undefined;
+
+                    if (rUsername) {
                         dispatch({ type: "setUsername", value: rUsername });
-                        dispatch({ type: "setCards", value: rCards });
                     }
 
-                    dispatch({ type: "setRound", value: rRound });
-                    dispatch({ type: "setTurn", value: rTurn });
-                    dispatch({ type: "setTrump", value: rTrump });
-                    dispatch({ type: "setPoints", value: rPoints });
+                    if (inGame) {
+                        dispatch({ type: "setInGame", value: true });
+                        dispatch({ type: "setRound", value: rRound });
+                        dispatch({ type: "setTurn", value: rTurn });
+                        dispatch({ type: "setTrump", value: rTrump });
+                        dispatch({ type: "setPoints", value: rPoints });
+                    }
+
+                    if (playing) {
+                        dispatch({ type: "setCards", value: rCards });
+                    }
                 }
             }
 
         });
 
-        let user_id = getCookie(`sueca:${room}:user_id`);
+        let user_id = getCookie(`sueca:${state.room}:user_id`);
 
         let m: SocketMessage = {
             type: SocketMessageType.JoinRoom,
