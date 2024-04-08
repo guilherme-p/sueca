@@ -27,6 +27,7 @@
     "typescript": "5.0.4"
   },
   "devDependencies": {
-    "@tsconfig/next": "^1.0.5"
+    "@tsconfig/next": "^1.0.5",
+    "prettier": "^3.2.5"
   }
 }

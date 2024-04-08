@@ -1,15 +1,15 @@
 import assert from 'node:assert';
-import { getCookie, setCookie, deleteCookie, hasCookie } from 'cookies-next';
+import { getCookie, setCookie, deleteCookie, hasCookie, CookieValueTypes } from 'cookies-next';
 import { useRouter } from 'next/router'
-import { useState, useEffect, useRef, useReducer, Dispatch, SetStateAction, ReactNode, ReactElement } from 'react';
+import { useState, useEffect, useRef, useReducer, Dispatch, SetStateAction, ReactNode, ReactElement, useCallback } from 'react';
 import { io, Socket } from "socket.io-client";
-import { SocketMessage, SocketMessageType } from '../../lib/socket_types';
+import { SocketMessage, SocketMessageType, JoinRoomMessage} from '../../lib/socketTypes';
 import cardImages from '../../lib/cardImages';
 import tableImage from '../../images/table2.svg';
 import Image from 'next/image';
 
 interface State {
-    roomExists: boolean,
+    roomExists: boolean | undefined,
     room: string,
     inGame: boolean,
     username: string, 
@@ -18,15 +18,21 @@ interface State {
     cards: string[],
     trump: string,
     round: [number, string][],
+    gameOver: boolean,
     turn: number,
     playerNumber: number,
     points: [number, number],
     socket: Socket | undefined,
 }
 
-function UserCards({round, cards, activeCard, setActiveCard, validateMove, handlePlay}: 
+function convertCookies(val: CookieValueTypes) {
+    let converted: string | undefined = (typeof val === 'string') ? val : undefined;
+    return converted;
+}
+
+function UserCards({cards, activeCard, setActiveCard, validateMove, handlePlay}: 
     {
-        round: [number, string][], cards: string[], activeCard: string, setActiveCard: Dispatch<SetStateAction<string>>, 
+        cards: string[], activeCard: string, setActiveCard: Dispatch<SetStateAction<string>>, 
         validateMove: (card: string) => boolean, handlePlay: (card: string) => void
     }
 ): ReactElement 
@@ -89,10 +95,8 @@ function PlayScreen({state, dispatch}: {state: State, dispatch: React.Dispatch<{
     function handlePlay(card: string) {
         let m: SocketMessage = {
             type: SocketMessageType.Play,
-            body: {
-                user_id: getCookie(`sueca:${state.room}:user_id`),
-                card: card,
-            }
+            user_id: convertCookies(getCookie(`sueca:${state.room}:user_id`)),
+            card: card,
         }
 
         state.socket!.emit("message", state.room, m);
@@ -107,8 +111,8 @@ function PlayScreen({state, dispatch}: {state: State, dispatch: React.Dispatch<{
 
     return (
         <div className="container h-screen w-screen flex flex-col items-center justify-center relative">
-            <div className="mt-8 container flex flex-row justify-center header">
-                <div className="w-24 container mr-24">
+            <div className="my-4 container flex flex-row justify-center header">
+                <div className="w-24 container mr-24 trump">
                     {cardImages[state.trump]}
                 </div>
 
@@ -116,13 +120,13 @@ function PlayScreen({state, dispatch}: {state: State, dispatch: React.Dispatch<{
                     <span className="font-bold text-3xl">{state.points[0]}</span>
                 </div>
 
-                <div className="flex justify-center items-center w-24 h-24 bg-orange-400 text-center orange-points">
+                <div className="flex justify-center items-center w-24 h-24 bg-orange-400 orange-points">
                     <span className="font-bold text-3xl">{state.points[1]}</span>
                 </div>
 
             </div>
 
-            <div className="mt-8 inline-block relative">
+            <div className="my-4 inline-block relative">
                 <Image
                     src={tableImage}
                     alt="Card table"
@@ -169,7 +173,7 @@ function PlayScreen({state, dispatch}: {state: State, dispatch: React.Dispatch<{
                 </div>
             </div>
 
-            {state.cards && <UserCards round={state.round} cards={state.cards} activeCard={activeCard} setActiveCard={setActiveCard} validateMove={validateMove} handlePlay={handlePlay}/>}
+            {state.cards && <UserCards cards={state.cards} activeCard={activeCard} setActiveCard={setActiveCard} validateMove={validateMove} handlePlay={handlePlay}/>}
 
         </div>
     );
@@ -188,15 +192,11 @@ function JoinTeamScreen({state, dispatch}: {state: State, dispatch: React.Dispat
             return;
         }
 
-        let user_id = getCookie(`sueca:${state.room}:user_id`);
-
         let m: SocketMessage = {
             type: SocketMessageType.JoinTeam,
-            body: {
-                team: team,
-                username: state.username,
-                user_id: user_id,
-            }
+            team: team,
+            username: state.username,
+            user_id: convertCookies(getCookie(`sueca:${state.room}:user_id`)),
         };
 
         state.socket!.emit("message", state.room, m);
@@ -204,15 +204,16 @@ function JoinTeamScreen({state, dispatch}: {state: State, dispatch: React.Dispat
 
 
     function leaveTeam(team: number) {
-        let user_id = getCookie(`sueca:${state.room}:user_id`);
+        let user_id = convertCookies(getCookie(`sueca:${state.room}:user_id`));
+        if (!user_id) {
+            return;
+        }
 
         let m: SocketMessage = {
             type: SocketMessageType.LeaveTeam,
-            body: {
-                team: team,
-                username: state.username,
-                user_id: user_id,
-            }
+            team: team,
+            username: state.username,
+            user_id: user_id,
         };
 
         state.socket!.emit("message", state.room, m);
@@ -220,14 +221,15 @@ function JoinTeamScreen({state, dispatch}: {state: State, dispatch: React.Dispat
     }
 
     function startGame() {
-        let user_id = getCookie(`sueca:${state.room}:user_id`);
+        let user_id = convertCookies(getCookie(`sueca:${state.room}:user_id`));
+        if (!user_id) {
+            return;
+        }
 
         let m: SocketMessage = {
             type: SocketMessageType.StartGame,
-            body: {
-                username: state.username,
-                user_id: user_id,
-            }
+            username: state.username,
+            user_id: user_id,
         };
 
         state.socket!.emit("message", state.room, m);
@@ -415,7 +417,7 @@ export default function Page() {
     };
 
     const [state, dispatch] = useReducer(reducer, {
-        roomExists: false,
+        roomExists: undefined,
         room: "",
         inGame: false,
         username: "", 
@@ -424,6 +426,7 @@ export default function Page() {
         cards: [],
         trump: "",
         round: [],
+        gameOver: false,
         turn: 0,
         playerNumber: -1,
         points: [],
@@ -431,7 +434,7 @@ export default function Page() {
     });
 
     let stateRef = useRef<State>(state);
-    stateRef.current = state;
+    // stateRef.current = state;
 
     useEffect(() => {
         if (room) {
@@ -443,11 +446,11 @@ export default function Page() {
                 state.socket.disconnect();
             }
         };
-    }, [room]); // router.query is hydrated after initial page load, so room starts off empty
+    }, [room, state.socket]); // router.query is hydrated after initial page load, so room starts off empty
 
     useEffect(() => {
         if (state.room) {
-            initSocket();
+            initSocketCallback();
         }
 
     }, [state.room]);
@@ -455,11 +458,25 @@ export default function Page() {
     useEffect(() => {
         if (state.inGame) {
             let all = [state.team1[0], state.team2[0], state.team1[1], state.team2[1]];
-            console.log(all, state.username)
-            dispatch({ type: "setPlayerNumber", value: all.indexOf(state.username!) });
 
+            if (state.username && all.includes(state.username)) {
+                dispatch({ type: "setPlayerNumber", value: all.indexOf(state.username) });
+            }
         }
     }, [state.inGame]);
+
+    useEffect(() => {
+        if (state.round.length === 4 && !state.gameOver) {
+            setTimeout(((oldRound: State['round']) => {         // clear cards on table after 3s, if no move was made since (shouldn't happen)
+                if (stateRef.current.round === oldRound) {
+                    dispatch({ type: "setRound", value: []});
+                }
+            }).bind(null, state.round), 3000);
+        } 
+    }, [state.round]);
+
+
+    const initSocketCallback = useCallback(initSocket, [state.socket]);
 
     async function initSocket() {
         await fetch("/api/socket");
@@ -471,25 +488,23 @@ export default function Page() {
 
             switch (message.type) {
                 case SocketMessageType.RoomExists: {
-                    let rRoom = message.body.room;
+                    let exists = message.room;
 
-                    if (room === rRoom) {
-                        dispatch({ type: "setRoomExists", value: true });
-                    } 
+                    dispatch({ type: "setRoomExists", value: exists });
 
                     break;
                 }
 
                 case SocketMessageType.UserId: {
-                    let user_id = message.body.user_id;
+                    let user_id = message.user_id;
                     setCookie(`sueca:${state.room}:user_id`, user_id, {maxAge: 60 * 60 * 24});
 
                     break;
                 }
 
                 case SocketMessageType.Teams: {
-                    let t1 = message.body.team1;
-                    let t2 = message.body.team2;
+                    let t1 = message.team1;
+                    let t2 = message.team2;
 
                     dispatch({type: "setTeam1", value: [...t1]});
                     dispatch({type: "setTeam2", value: [...t2]});
@@ -498,47 +513,34 @@ export default function Page() {
                 }
 
                 case SocketMessageType.Deal: {
-                    let rCards = message.body.cards;
-                    let rTrump = message.body.trump;
+                    let cards = message.cards;
+                    let trump = message.trump;
 
                     dispatch({ type: "setInGame", value: true });
-                    dispatch({ type: "setCards", value: rCards });
-                    dispatch({ type: "setTrump", value: rTrump });
+                    dispatch({ type: "setCards", value: cards });
+                    dispatch({ type: "setTrump", value: trump });
 
                     break;
                 }
 
                 case SocketMessageType.Play: {
-                    let rCards = message.body.cards;
-                    dispatch({ type: "setCards", value: rCards });
+                    let cards = message.cards;
+                    dispatch({ type: "setCards", value: cards });
 
                     break;
                 }
 
                 case SocketMessageType.Round: {
-                    let rRound = message.body.round;
-                    let rTurn = message.body.turn;
-                    let rPoints = message.body.points;
-                    let game_over = message.body.game_over;
+                    let round = message.round;
+                    let turn = message.turn;
+                    let points = message.points;
+                    let gameOver = message.gameOver;
 
-                    dispatch({ type: "setRound", value: rRound });
-                    dispatch({ type: "setTurn", value: rTurn });
-                    
-                    if (rRound.length === 4 && !game_over) {
-                        setTimeout(() => {
-                            let currentRound = stateRef.current.round;
-                            let currentPoints = stateRef.current.points;
+                    dispatch({ type: "setRound", value: round });
+                    dispatch({ type: "setTurn", value: turn });
+                    dispatch({ type: "setPoints", value: points });
 
-                            dispatch({ type: "setRound", value: (currentRound.length !== 4 ? currentRound : []) });
-                            dispatch({ type: "setPoints", value: (currentPoints > rPoints ? currentPoints : rPoints) });
-                        }, 3000);
-                    } 
-
-                    else {
-                        dispatch({ type: "setPoints", value: rPoints });
-                    }
-
-                    if (game_over) {
+                    if (gameOver) {
                         deleteCookie(`sueca:${state.room}:user_id`);
                         socket.disconnect();
                     }
@@ -547,43 +549,39 @@ export default function Page() {
                 }
 
                 case SocketMessageType.JoinRoom: {
-                    let rUsername = message.body.username;
-                    let rCards = message.body.cards;
-                    let rRound = message.body.round;
-                    let rTurn = message.body.turn;
-                    let rTrump = message.body.trump;
-                    let rPoints = message.body.points;
+                    let username = message.username;
+                    let cards = message.cards;
+                    let round = message.round;
+                    let turn = message.turn;
+                    let trump = message.trump;
+                    let points = message.points;
 
-                    let playing: boolean = rCards !== undefined;
-                    let inGame: boolean = rRound !== undefined;
+                    let playing: boolean = cards !== undefined;
+                    let inGame: boolean = round !== undefined;
 
-                    if (rUsername) {
-                        dispatch({ type: "setUsername", value: rUsername });
+                    if (username) {
+                        dispatch({ type: "setUsername", value: username });
                     }
 
                     if (inGame) {
                         dispatch({ type: "setInGame", value: true });
-                        dispatch({ type: "setRound", value: rRound });
-                        dispatch({ type: "setTurn", value: rTurn });
-                        dispatch({ type: "setTrump", value: rTrump });
-                        dispatch({ type: "setPoints", value: rPoints });
+                        dispatch({ type: "setRound", value: round });
+                        dispatch({ type: "setTurn", value: turn });
+                        dispatch({ type: "setTrump", value: trump });
+                        dispatch({ type: "setPoints", value: points });
                     }
 
                     if (playing) {
-                        dispatch({ type: "setCards", value: rCards });
+                        dispatch({ type: "setCards", value: cards });
                     }
                 }
             }
 
         });
 
-        let user_id = getCookie(`sueca:${state.room}:user_id`);
-
-        let m: SocketMessage = {
+        let m: JoinRoomMessage = {
             type: SocketMessageType.JoinRoom,
-            body: {
-                user_id: user_id,
-            }
+            user_id: convertCookies(getCookie(`sueca:${state.room}:user_id`)),
         };
 
         // console.log(room, m);
@@ -592,6 +590,11 @@ export default function Page() {
         dispatch({ type: "setSocket", value: socket });
     }
 
+    if (state.roomExists === false) {
+        return (
+            <p>Sala nao existente</p>
+        )
+    }
 
     if (state.socket && state.room && state.roomExists) {
         if (!state.inGame) {

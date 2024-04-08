@@ -1,35 +1,23 @@
 import assert from 'node:assert';
 import { createClient } from 'redis';
 import { Server as IOServer} from 'socket.io';
-import type { Server as HTTPServer } from "http";
-import type { NextApiRequest, NextApiResponse } from 'next';
-import type { Socket as NetSocket } from "net";
+import type { NextApiRequest } from 'next';
 import { randomBytes } from 'crypto';
-import { SuecaServer } from '../../lib/sueca'; 
-import { SocketMessage, SocketMessageType } from '../../lib/socket_types';
+import { SuecaServer } from '@/lib/sueca'; 
+import { NextApiResponseWithSocket, SocketMessage, SocketMessageType } from '@/lib/socketTypes';
+import joinRoomHandler from '@/lib/joinRoomHandler';
+import joinTeamHandler from '@/lib/joinTeamHandler';
+import leaveTeamHandler from '@/lib/leaveTeamHandler';
+import startGameHandler from '@/lib/startGameHandler';
+import playHandler from '@/lib/playHandler';
 
-interface SocketServer extends HTTPServer {
-  io?: IOServer | undefined;
-}
+const redis = await createClient()
+    .on('error', err => console.log('Redis Client Error', err))
+    .connect();
 
-interface SocketWithIO extends NetSocket {
-  server: SocketServer;
-}
+export type MyRedisClient = typeof redis;
 
-interface NextApiResponseWithSocket extends NextApiResponse {
-  socket: SocketWithIO;
-}
-
-const redis = createClient();
-
-redis.on('error', err => { 
-    console.log('Redis redis Error', err)
-    throw new Error("redis");
-});
-
-let _ = await redis.connect();
-
-const generateUserId = async (room: string): Promise<string> => {
+export const generateUserId = async (room: string): Promise<string> => {
     let user_id: string = randomBytes(32).toString('hex');
     let existing = await redis.hKeys(`${room}:id_to_username`);  
 
@@ -40,7 +28,6 @@ const generateUserId = async (room: string): Promise<string> => {
 
     return user_id;
 }
-
 
 export default async function SocketHandler(req: NextApiRequest, res: NextApiResponseWithSocket) {
     if (res.socket.server.io) {
@@ -60,373 +47,28 @@ export default async function SocketHandler(req: NextApiRequest, res: NextApiRes
 
             switch (message.type) {
                 case SocketMessageType.JoinRoom: {
-                    let exists: boolean = await redis.sIsMember("rooms", room);
-
-                    if (!exists) {
-                        return;
-                    }
-
-                    let m: SocketMessage = {
-                        type: SocketMessageType.RoomExists,
-                        body: {
-                            room: room,
-                        }
-                    }
-
-                    socket.emit("message", m);
-
-                    socket.join(room);
-
-                    let inGame: boolean = await redis.hExists(room, "game");
-                    let user_id = message.body.user_id;
-
-                    let team1 = await redis.lRange(`${room}:team1`, 0, -1);
-                    let team2 = await redis.lRange(`${room}:team2`, 0, -1);
-                    let all = [team1[0], team2[0], team1[1], team2[1]];
-
-                    m = {
-                        type: SocketMessageType.Teams,
-                        body: {
-                            team1: team1,
-                            team2: team2,
-                        }
-                    }
-
-                    socket.emit("message", m);
-
-                    if (inGame) {
-                        let game = await redis.hGet(room, "game") as string;
-                        let game_obj: SuecaServer = new SuecaServer();
-                        game_obj.from(JSON.parse(game));
-
-                        if (user_id !== undefined) {
-                            let username: string | undefined = await redis.hGet(`${room}:id_to_username`, user_id);
-                            let playing: boolean = username !== undefined && username !== "" && all.includes(username); 
-                            console.log(all, username, playing);
-
-                            if (playing) {
-                                let player_n = all.indexOf(username as string);
-                                let cards = game_obj.cards[player_n];
-
-                                let m: SocketMessage = {
-                                    type: SocketMessageType.JoinRoom,
-                                    body: {
-                                        username: username,
-                                        cards: cards,
-                                        round: game_obj.round,
-                                        turn: game_obj.turn,
-                                        trump: game_obj.trump,
-                                        points: game_obj.points,
-                                    } 
-                                }
-
-                                socket.emit("message", m);
-
-                                await redis.hSet(`${room}:username_to_socket`, username as string, socket.id);
-                            }
-
-                            // should not be needed since if user_id is defined you should be playing 
-                            else {
-                                let m: SocketMessage = {
-                                    type: SocketMessageType.JoinRoom,
-                                    body: {
-                                        round: game_obj.round,
-                                        turn: game_obj.turn,
-                                        trump: game_obj.trump,
-                                        points: game_obj.points,
-                                    } 
-                                }
-
-                                socket.emit("message", m);
-                            }
-
-                        }
-
-                        else {
-                            let m: SocketMessage = {
-                                type: SocketMessageType.JoinRoom,
-                                body: {
-                                    round: game_obj.round,
-                                    turn: game_obj.turn,
-                                    trump: game_obj.trump,
-                                    points: game_obj.points,
-                                } 
-                            }
-
-                            socket.emit("message", m);
-                        }
-                    }
-
-                    else {
-                        if (user_id !== undefined) {
-                            let username: string | undefined = await redis.hGet(`${room}:id_to_username`, user_id);
-                            if (username) {
-                                m = {
-                                    type: SocketMessageType.JoinRoom,
-                                    body: {
-                                        username: username,
-                                    }
-                                }
-
-                                socket.emit("message", m);
-                            }
-                        }
-                    }
-
+                    joinRoomHandler(room, message, socket, redis);
                     break;
-                } 
+                }
 
                 case SocketMessageType.JoinTeam: {
-                    assert(await redis.sIsMember("rooms", room));
-                    assert(!await redis.hExists(room, "game"));
-
-                    let username = message.body.username;
-                    let team = message.body.team;
-                    let user_id = message.body.user_id;
-
-                    let team1 = await redis.lRange(`${room}:team1`, 0, -1);
-                    let team2 = await redis.lRange(`${room}:team2`, 0, -1);
-                    let players = [...team1, ...team2];
-
-                    let n_players_team = team === 1 ? team1.length : team2.length;
-                    assert(n_players_team < 4); 
-
-                    let existing_player: boolean = user_id !== undefined && username === await redis.hGet(`${room}:id_to_username`, user_id); 
-                    let new_player: boolean = !existing_player;
-
-                    if (new_player) {
-                        let username_taken: boolean = players.includes(username);
-
-                        if (username_taken) {
-                            let m: SocketMessage = {
-                                type: SocketMessageType.UsernameTaken,
-                            };
-
-                            socket.emit("message", m);
-                            return;
-                        }
-
-                        let user_id = await generateUserId(room);
-
-                        await redis.hSet(`${room}:id_to_username`, user_id, username);
-                        await redis.hSet(`${room}:username_to_id`, username, user_id);
-
-                        let m: SocketMessage = {
-                            type: SocketMessageType.UserId,
-                            body: {
-                                user_id: user_id,
-                            }
-                        };
-
-                        socket.emit("message", m);
-                    } 
-
-                    else {
-                        let last_team = team === 1 ? team2 : team1;
-                        let last_team_n: number = team === 1 ? 2 : 1; 
-
-                        assert(last_team.includes(username));
-                        await redis.lRem(`${room}:team${last_team_n}`, 0, username);
-                    }
-
-                    await redis.rPush(`${room}:team${team}`, username);
-                    await redis.hSet(`socket_to_room`, socket.id, room);
-                    await redis.hSet(`${room}:username_to_socket`, username, socket.id);
-                    await redis.hSet(`${room}:socket_to_username`, socket.id, username);
-
-                    team1 = await redis.lRange(`${room}:team1`, 0, -1);
-                    team2 = await redis.lRange(`${room}:team2`, 0, -1);
-
-                    let m: SocketMessage = {
-                        type: SocketMessageType.Teams,
-                        body: {
-                            team1: team1,
-                            team2: team2,
-                        }
-                    }
-
-                    io.to(room).emit("message", m);
-                    
+                    joinTeamHandler(room, message, io, socket, redis);
                     break;
                 }
 
                 case SocketMessageType.LeaveTeam: {
-                    assert(await redis.sIsMember("rooms", room));
-                    assert(!await redis.hExists(room, "game"));
-
-                    let username = message.body.username;
-                    let user_id = message.body.user_id;
-                    let team = message.body.team;
-
-                    let auth: boolean = username === await redis.hGet(`${room}:id_to_username`, user_id);
-                    assert(auth);
-
-                    let team_arr = await redis.lRange(`${room}:team${team}`, 0, -1);
-                    assert(team_arr.includes(username));
-
-                    await redis.hDel(`socket_to_room`, socket.id);
-                    await redis.hDel(`${room}:username_to_socket`, username);
-                    await redis.hDel(`${room}:socket_to_username`, socket.id);
-                    await redis.hDel(`${room}:id_to_username`, user_id);
-                    await redis.hDel(`${room}:username_to_id`, username);
-                    await redis.lRem(`${room}:team${team}`, 0, username); 
-
-                    let team1 = await redis.lRange(`${room}:team1`, 0, -1);
-                    let team2 = await redis.lRange(`${room}:team2`, 0, -1);
-
-                    let m: SocketMessage = {
-                        type: SocketMessageType.Teams,
-                        body: {
-                            team1: team1,
-                            team2: team2,
-                        }
-                    }
-
-                    io.to(room).emit("message", m);
-         
+                    leaveTeamHandler(room, message, io, socket, redis);
                     break;
                 }
 
                 case SocketMessageType.StartGame: {
-                    let username = message.body.username;
-                    let user_id = message.body.user_id;
-
-                    let auth: boolean = username === await redis.hGet(`${room}:id_to_username`, user_id);
-                    assert(auth);
-
-                    assert(await redis.sIsMember("rooms", room));
-                    assert(!await redis.hExists(room, "game"));
-
-                    let n_team1: number = await redis.lLen(`${room}:team1`);
-                    let n_team2: number = await redis.lLen(`${room}:team2`);
-                    assert(n_team1 === 2 && n_team2 === 2);
-
-                    let team1 = await redis.lRange(`${room}:team1`, 0, -1);
-                    let team2 = await redis.lRange(`${room}:team2`, 0, -1);
-
-                    let player1_username: string = team1[0];
-                    let player2_username: string = team2[0];
-                    let player3_username: string = team1[1];
-                    let player4_username: string = team2[1];
-
-                    let m: SocketMessage = {
-                        type: SocketMessageType.Teams,
-                        body: {
-                            team1: [player1_username, player3_username],
-                            team2: [player2_username, player4_username],
-                        }
-                    };
-
-                    io.to(room).emit("message", m);
-
-                    let game_obj = new SuecaServer();
-                    game_obj.start();
-
-                    let cards: [string[], string[], string[], string[]] = game_obj.cards;
-
-                    let player1_socket = await redis.hGet(`${room}:username_to_socket`, player1_username);
-                    let player2_socket = await redis.hGet(`${room}:username_to_socket`, player2_username);
-                    let player3_socket = await redis.hGet(`${room}:username_to_socket`, player3_username);
-                    let player4_socket = await redis.hGet(`${room}:username_to_socket`, player4_username);
-
-                    m = {
-                        type: SocketMessageType.Deal,
-                        body: {
-                            cards: cards[0],
-                            trump: game_obj.trump,
-                        }
-                    }
-
-                    io.to(player1_socket as string).emit("message", m);
-
-                    m = {
-                        type: SocketMessageType.Deal,
-                        body: {
-                            cards: cards[1],
-                            trump: game_obj.trump,
-                        }
-                    }
-
-                    io.to(player2_socket as string).emit("message", m);
-
-                    m = {
-                        type: SocketMessageType.Deal,
-                        body: {
-                            cards: cards[2],
-                            trump: game_obj.trump,
-                        }
-                    }
-
-                    io.to(player3_socket as string).emit("message", m);
-
-                    m = {
-                        type: SocketMessageType.Deal,
-                        body: {
-                            cards: cards[3],
-                            trump: game_obj.trump,
-                        }
-                    }
-
-                    io.to(player4_socket as string).emit("message", m);
-
-                    await redis.hSet(room, "game", JSON.stringify(game_obj));
-
+                    startGameHandler(room, message, io, socket, redis);
                     break;
                 }
 
                 case SocketMessageType.Play: {
-                    assert(await redis.sIsMember("rooms", room));
-                    assert(await redis.hExists(room, "game"));
-                    let game = await redis.hGet(room, "game") as string;
-
-                    let user_id: string = message.body.user_id;
-                    let card = message.body.card;
-
-                    assert(await redis.hExists(`${room}:id_to_username`, user_id));
-                    let username = await redis.hGet(`${room}:id_to_username`, user_id) as string;
-
-                    let team1 = await redis.lRange(`${room}:team1`, 0, -1);
-                    let team2 = await redis.lRange(`${room}:team2`, 0, -1);
-                    let all = [team1[0], team2[0], team1[1], team2[1]];
-
-                    assert(all.includes(username));
-
-                    let player_n = all.indexOf(username);
-
-                    let game_obj: SuecaServer = new SuecaServer();
-                    game_obj.from(JSON.parse(game));
-                    console.log("game", game, game_obj);
-
-                    let game_over: boolean = game_obj.play(player_n, card);
-
-                    await redis.hSet(room, "game", JSON.stringify(game_obj));
-
-                    let player_socket = await redis.hGet(`${room}:username_to_socket`, username) as string;
-
-                    let m: SocketMessage = {
-                        type: SocketMessageType.Play,
-                        body: {
-                            cards: game_obj.cards[player_n],
-                        }
-                    };
-
-                    socket.emit("message", m);
-
-                    m = {
-                        type: SocketMessageType.Round,
-                        body: {
-                            round: game_obj.round,
-                            turn: game_obj.turn,
-                            points: game_obj.points,
-                            game_over: game_over,
-                        }
-                    };
-
-                    io.to(room).emit("message", m);
-
-                    if (game_over) {
-                        cleanupRoom(room);
-                    }
+                    playHandler(room, message, io, socket, redis);
+                    break;
                 }
             } 
         });
@@ -456,7 +98,7 @@ async function cleanupRooms() {
             continue;
         }
 
-        let time_elapsed = Date.now() - (created_ts as unknown as number); 
+        let time_elapsed = Date.now() - parseInt(created_ts); 
         time_elapsed = Math.floor(time_elapsed) / 1000; // in seconds
         if (time_elapsed >= ROOM_EXPIRATION_TIME) {
             cleanupRoom(room);
@@ -465,7 +107,7 @@ async function cleanupRooms() {
 
 }
 
-async function cleanupRoom(room: string) {
+export async function cleanupRoom(room: string) {
     let team1 = await redis.lRange(`${room}:team1`, 0, -1);
     let team2 = await redis.lRange(`${room}:team2`, 0, -1);
     let all = [team1[0], team2[0], team1[1], team2[1]];
