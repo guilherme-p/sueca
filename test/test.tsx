@@ -4,8 +4,8 @@ import { SocketMessage, SocketMessageType } from "@/lib/socketTypes";
 
 const url = process.env.URL || "http://localhost:3000";
 const room: string = process.env.ROOM || "b2090b36";
-const team1: number = Number(process.env.TEAM1) || 1;
-const team2: number = Number(process.env.TEAM2) || 2;
+const n_team1: number = Number(process.env.N_TEAM1) || 1;
+const n_team2: number = Number(process.env.N_TEAM2) || 2;
 
 type MockPlayer = {
     user_id?: string;
@@ -147,10 +147,10 @@ const run = (team: number, username: string) => {
 
 let testIdx = 1;
 
-for (let i = 0; i < team1; i++) {
-    run(1, `testasdfsdfaaaa${testIdx++}`);
+for (let i = 0; i < n_team1; i++) {
+    run(1, `test${testIdx++}`);
 }
 
-for (let i = 0; i < team2; i++) {
-    run(2, `testasdfsdfaaaa${testIdx++}`);
+for (let i = 0; i < n_team2; i++) {
+    run(2, `test${testIdx++}`);
 }
