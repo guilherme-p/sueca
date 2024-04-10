@@ -110,7 +110,7 @@ function PlayScreen({state, dispatch}: {state: State, dispatch: React.Dispatch<{
     let usernameNumbers: number[] = order.map(([u, n]) => n);
 
     return (
-        <div className="container h-screen w-screen flex flex-col items-center justify-center relative">
+        <div className="container flex flex-col items-center justify-center relative">
             <div className="my-4 container flex flex-row justify-center header">
                 <div className="w-24 container mr-24 trump">
                     {cardImages[state.trump]}
@@ -386,6 +386,12 @@ export default function Page() {
                     ...state,
                     round: action.value,
                 }
+            
+            case 'setGameOver':
+                return {
+                    ...state,
+                    gameOver: action.value,
+                }
 
             case 'setTurn':
                 return {
@@ -434,10 +440,11 @@ export default function Page() {
     });
 
     let stateRef = useRef<State>(state);
-    // stateRef.current = state;
+    stateRef.current = state;
 
     useEffect(() => {
         if (room) {
+            console.log(room);
             dispatch({ type: "setRoom", value: room});
         }
 
@@ -449,8 +456,10 @@ export default function Page() {
     }, [room, state.socket]); // router.query is hydrated after initial page load, so room starts off empty
 
     useEffect(() => {
-        if (state.room) {
-            initSocketCallback();
+        if (state.room !== "") {
+            console.log(state.room)
+            // initSocketCallback();
+            initSocket();
         }
 
     }, [state.room]);
@@ -476,7 +485,8 @@ export default function Page() {
     }, [state.round]);
 
 
-    const initSocketCallback = useCallback(initSocket, [state.socket]);
+    // const initSocketCallback = useCallback(initSocket, [state.socket]);
+    console.log(stateRef.current);
 
     async function initSocket() {
         await fetch("/api/socket");
@@ -488,7 +498,7 @@ export default function Page() {
 
             switch (message.type) {
                 case SocketMessageType.RoomExists: {
-                    let exists = message.room;
+                    let exists = message.exists;
 
                     dispatch({ type: "setRoomExists", value: exists });
 
@@ -523,7 +533,7 @@ export default function Page() {
                     break;
                 }
 
-                case SocketMessageType.Play: {
+                case SocketMessageType.PlayReply: {
                     let cards = message.cards;
                     dispatch({ type: "setCards", value: cards });
 
@@ -536,6 +546,7 @@ export default function Page() {
                     let points = message.points;
                     let gameOver = message.gameOver;
 
+                    dispatch({ type: "setGameOver", value: gameOver });
                     dispatch({ type: "setRound", value: round });
                     dispatch({ type: "setTurn", value: turn });
                     dispatch({ type: "setPoints", value: points });
@@ -548,7 +559,7 @@ export default function Page() {
                     break;
                 }
 
-                case SocketMessageType.JoinRoom: {
+                case SocketMessageType.JoinRoomReply: {
                     let username = message.username;
                     let cards = message.cards;
                     let round = message.round;

@@ -59,7 +59,7 @@ export default async function joinRoomHandler(
         let playing: boolean =
             username !== undefined && username !== "" && all.includes(username);
         let cards;
-        console.log(all, username, playing);
+        // console.log(all, username, playing);
 
         if (playing) {
             let player_n = all.indexOf(username as string);

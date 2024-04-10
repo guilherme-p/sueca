@@ -41,7 +41,7 @@ export default async function playHandler(
 
     let game_obj: SuecaServer = new SuecaServer();
     game_obj.from(JSON.parse(game!));
-    console.log("game", game, game_obj);
+    // console.log("game", game, game_obj);
 
     let game_over: boolean = game_obj.play(player_n, card);
 
