@@ -65,6 +65,6 @@ export default async function playHandler(
     io.to(room).emit("message", m);
 
     if (game_over) {
-        cleanupRoom(room);
+        setTimeout(() => cleanupRoom(room), 1000 * 60 * 5); // cleanup room after 5 minutes
     }
 }
